@@ -177,7 +177,7 @@ impl<'a> Widget for DashboardApp<'a> {
         self.render_pane(right_2, buf, ActiveBlock::Logs, "Logs");
 
         // Footer shortcuts bar
-        Paragraph::new("[q] Quit | [[]/] Switch Tab | [?] Help | [a] About")
+        Paragraph::new("[q] Quit | [?] Help | [a] About")
             .render(shortcut_area, buf);
 
         if self.app.show_help {
