@@ -1,7 +1,9 @@
+mod app;
 mod ui;
 
+use app::App;
 use color_eyre::Result;
-use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use crossterm::event::{self, Event, KeyEventKind};
 use ratatui::DefaultTerminal;
 use ui::DashboardApp;
 
@@ -15,47 +17,22 @@ fn main() -> Result<()> {
 }
 
 fn run(terminal: &mut DefaultTerminal) -> Result<()> {
-    let mut show_help = false;
-    let mut show_about = false;
+    let mut app = App::default();
 
     loop {
         terminal.draw(|frame| {
-            frame.render_widget(
-                DashboardApp {
-                    show_help,
-                    show_about,
-                },
-                frame.area(),
-            );
+            frame.render_widget(DashboardApp { app: &app }, frame.area());
         })?;
 
         if let Event::Key(key) = event::read()? {
             if key.kind == KeyEventKind::Press {
-                match key.code {
-                    KeyCode::Esc => {
-                        if show_help {
-                            show_help = false;
-                        } else if show_about {
-                            show_about = false;
-                        } else {
-                            break;
-                        }
-                    }
-                    KeyCode::Char('q') => {
-                        break;
-                    }
-                    KeyCode::Char('?') => {
-                        show_about = false;
-                        show_help = !show_help
-                    }
-                    KeyCode::Char('a') => {
-                        show_help = false;
-                        show_about = !show_about
-                    }
-                    _ => {}
+                app.handle_key_event(key);
+                if app.should_quit {
+                    break;
                 }
             }
         }
     }
+
     Ok(())
 }

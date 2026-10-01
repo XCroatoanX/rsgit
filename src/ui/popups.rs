@@ -37,6 +37,10 @@ pub fn render_help_popup(area: Rect, buf: &mut Buffer) {
     let help_text = [
         Line::from(Span::styled("Shortcuts", BOLD)),
         Line::from(""),
+        Line::from(" [1-6]  Select Pane"),
+        Line::from(" [Tab]   Next Pane"),
+        Line::from(" [h/l]  Navigation between panes"),
+        Line::from(" [[/]]  Navigation inside pane"),
         Line::from(" [?]   Toggle Help"),
         Line::from(" [a]   Toggle About"),
         Line::from(" [q]   Quit Application"),
