@@ -13,7 +13,7 @@ env:
 jobs:
   # ------------------------------------------------------------------
   # 1. SMOKE TESTS
-  # Runs tests, lints, and formatting checks on all target OSes.
+  # Runs tests, lints, and formatting checks across major host OSes.
   # ------------------------------------------------------------------
   smoke-test:
     name: Smoke Test (${{ matrix.os }})
@@ -46,22 +46,28 @@ jobs:
 
   # ------------------------------------------------------------------
   # 2. BUILD AND PACKAGE
-  # Triggers only after smoke tests pass across all platforms.
+  # Cross-compiles binaries for x86_64 and ARM64 on Linux, macOS, & Windows.
   # ------------------------------------------------------------------
   package:
     name: Package (${{ matrix.job.target }})
     needs: smoke-test
     runs-on: ${{ matrix.job.os }}
-    permissions:
-      contents: write
     strategy:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest,  target: x86_64-unknown-linux-gnu,  binary-ext: "",   archive-ext: "tar.gz" }
-          - { os: macos-latest,   target: x86_64-apple-darwin,        binary-ext: "",   archive-ext: "tar.gz" }
-          - { os: macos-latest,   target: aarch64-apple-darwin,       binary-ext: "",   archive-ext: "tar.gz" }
-          - { os: windows-latest, target: x86_64-pc-windows-msvc,     binary-ext: ".exe", archive-ext: "zip" }
+          # Linux x64
+          - { os: ubuntu-latest,  target: x86_64-unknown-linux-gnu,  binary-ext: "",   archive-ext: "tar.gz", use-cross: false }
+          # Linux ARM64 (cross-compiled via Docker)
+          - { os: ubuntu-latest,  target: aarch64-unknown-linux-musl, binary-ext: "",   archive-ext: "tar.gz", use-cross: true  }
+          # macOS Intel
+          - { os: macos-latest,   target: x86_64-apple-darwin,        binary-ext: "",   archive-ext: "tar.gz", use-cross: false }
+          # macOS Apple Silicon
+          - { os: macos-latest,   target: aarch64-apple-darwin,       binary-ext: "",   archive-ext: "tar.gz", use-cross: false }
+          # Windows x64
+          - { os: windows-latest, target: x86_64-pc-windows-msvc,     binary-ext: ".exe", archive-ext: "zip", use-cross: false }
+          # Windows ARM64
+          - { os: windows-latest, target: aarch64-pc-windows-msvc,    binary-ext: ".exe", archive-ext: "zip", use-cross: false }
 
     steps:
       - name: Checkout repository
@@ -77,6 +83,10 @@ jobs:
         with:
           key: ${{ matrix.job.target }}
 
+      - name: Install Cross (for Linux ARM64)
+        if: matrix.job.use-cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
       - name: Extract App Details
         id: app_info
         shell: bash
@@ -87,7 +97,13 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Build Release Binary
-        run: cargo build --release --target ${{ matrix.job.target }}
+        shell: bash
+        run: |
+          if [ "${{ matrix.job.use-cross }}" = "true" ]; then
+            cross build --release --target ${{ matrix.job.target }}
+          else
+            cargo build --release --target ${{ matrix.job.target }}
+          fi
 
       - name: Prepare Package
         id: package_step
@@ -123,11 +139,29 @@ jobs:
           path: ${{ steps.package_step.outputs.archive_name }}
           if-no-files-found: error
 
-      - name: Create or Update GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+  # ------------------------------------------------------------------
+  # 3. PUBLISH GITHUB RELEASE
+  # Runs ONCE after all binary packages are successfully built.
+  # ------------------------------------------------------------------
+  release:
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all package artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: package-*
+          merge-multiple: true
+          path: artifacts
+
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ steps.package_step.outputs.archive_name }}
+          files: artifacts/*
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
