@@ -76,10 +76,7 @@ pub fn render_about_popup(area: Rect, buf: &mut Buffer) {
             Span::styled("Repository: ", DARK_GRAY),
             Span::raw(APP_REPOSITORY),
         ]),
-        Line::from(vec![
-            Span::styled("License: ", DARK_GRAY),
-            Span::raw("MIT"),
-        ]),
+        Line::from(vec![Span::styled("License: ", DARK_GRAY), Span::raw("MIT")]),
         Line::from(""),
         Line::from(Span::styled("Press [Esc] or [a] to close", YELLOW)),
     ];

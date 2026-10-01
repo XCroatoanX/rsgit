@@ -1,7 +1,7 @@
 use color_eyre::Result;
 use std::env;
 use std::io::{self, Write};
-use std::path::{PathBuf};
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 pub enum StartupAction {

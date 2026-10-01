@@ -30,7 +30,7 @@ impl App {
             }
             return;
         }
-        
+
         match key.code {
             KeyCode::Esc | KeyCode::Char('q') => self.should_quit = true,
 
@@ -41,7 +41,7 @@ impl App {
             KeyCode::BackTab | KeyCode::Up | KeyCode::Char('k') => {
                 self.active_block = self.active_block.previous();
             }
-            
+
             KeyCode::Char(c @ '1'..='5') => {
                 if let Some(digit) = c.to_digit(10) {
                     if let Some(block) = ActiveBlock::from_index((digit - 1) as usize) {
@@ -49,14 +49,14 @@ impl App {
                     }
                 }
             }
-            
+
             KeyCode::Char('[') if self.active_block == ActiveBlock::Branches => {
                 self.branch_tab = self.branch_tab.previous();
             }
             KeyCode::Char(']') if self.active_block == ActiveBlock::Branches => {
                 self.branch_tab = self.branch_tab.next();
             }
-            
+
             KeyCode::Char('?') => {
                 self.show_about = false;
                 self.show_help = !self.show_help;

@@ -1,14 +1,14 @@
 mod app;
-mod ui;
 mod startup;
+mod ui;
 
-use std::env;
+use crate::startup::{StartupAction, ensure_git_repo};
 use app::App;
 use color_eyre::Result;
 use crossterm::event::{self, Event, KeyEventKind};
 use ratatui::DefaultTerminal;
+use std::env;
 use ui::DashboardApp;
-use crate::startup::{ensure_git_repo, StartupAction};
 
 fn main() -> Result<()> {
     color_eyre::install()?;

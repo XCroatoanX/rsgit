@@ -98,7 +98,9 @@ impl<'a> DashboardApp<'a> {
     }
 
     fn format_branch_title(&self) -> Line<'static> {
-        let active_style = Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD);
+        let active_style = Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD);
         let inactive_style = Style::default().fg(Color::DarkGray);
 
         let mut spans = vec![Span::raw("[2] Branches ( ")];
@@ -125,7 +127,10 @@ impl<'a> DashboardApp<'a> {
     }
 
     fn render_pane(&self, area: Rect, buf: &mut Buffer, block_type: ActiveBlock, content: &str) {
-        let index = ActiveBlock::iter().position(|b| b == block_type).unwrap_or(0) + 1;
+        let index = ActiveBlock::iter()
+            .position(|b| b == block_type)
+            .unwrap_or(0)
+            + 1;
         let title = Line::from(format!("[{}] {}", index, block_type.title()));
         Paragraph::new(content)
             .block(self.create_block(title, block_type))
@@ -135,30 +140,23 @@ impl<'a> DashboardApp<'a> {
 
 impl<'a> Widget for DashboardApp<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let [main_area, shortcut_area] = Layout::vertical([
-            Constraint::Min(0),
-            Constraint::Length(1),
-        ])
-            .areas(area);
+        let [main_area, shortcut_area] =
+            Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(area);
 
-        let [left_col, right_col] = Layout::horizontal([
-            Constraint::Percentage(50),
-            Constraint::Percentage(50),
-        ])
-            .areas(main_area);
+        let [left_col, right_col] =
+            Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
+                .areas(main_area);
 
         let [left_1, left_2, left_3] = Layout::vertical([
             Constraint::Fill(1),
             Constraint::Fill(1),
             Constraint::Fill(1),
         ])
-            .areas(left_col);
+        .areas(left_col);
 
-        let [right_1, right_2] = Layout::vertical([
-            Constraint::Percentage(60),
-            Constraint::Percentage(40),
-        ])
-            .areas(right_col);
+        let [right_1, right_2] =
+            Layout::vertical([Constraint::Percentage(60), Constraint::Percentage(40)])
+                .areas(right_col);
 
         self.render_pane(left_1, buf, ActiveBlock::StagedFiles, "Staged files");
 
@@ -177,8 +175,7 @@ impl<'a> Widget for DashboardApp<'a> {
         self.render_pane(right_2, buf, ActiveBlock::Logs, "Logs");
 
         // Footer shortcuts bar
-        Paragraph::new("[q] Quit | [?] Help | [a] About")
-            .render(shortcut_area, buf);
+        Paragraph::new("[q] Quit | [?] Help | [a] About").render(shortcut_area, buf);
 
         if self.app.show_help {
             render_help_popup(area, buf);
