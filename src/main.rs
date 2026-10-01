@@ -34,12 +34,12 @@ fn run(terminal: &mut DefaultTerminal) -> Result<()> {
             frame.render_widget(DashboardApp { app: &app }, frame.area());
         })?;
 
-        if let Event::Key(key) = event::read()? {
-            if key.kind == KeyEventKind::Press {
-                app.handle_key_event(key);
-                if app.should_quit {
-                    break;
-                }
+        if let Event::Key(key) = event::read()?
+            && key.kind == KeyEventKind::Press
+        {
+            app.handle_key_event(key);
+            if app.should_quit {
+                break;
             }
         }
     }

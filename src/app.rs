@@ -43,10 +43,10 @@ impl App {
             }
 
             KeyCode::Char(c @ '1'..='5') => {
-                if let Some(digit) = c.to_digit(10) {
-                    if let Some(block) = ActiveBlock::from_index((digit - 1) as usize) {
-                        self.active_block = block;
-                    }
+                if let Some(digit) = c.to_digit(10)
+                    && let Some(block) = ActiveBlock::from_index((digit - 1) as usize)
+                {
+                    self.active_block = block;
                 }
             }
 
