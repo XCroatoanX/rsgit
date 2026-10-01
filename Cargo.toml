@@ -1,6 +1,6 @@
 [package]
 name = "rsgit"
-version = "0.1.0"
+version = "0.1.0-alpha"
 edition = "2024"
 authors = ["Artem Stasyuk <stasyukartem2@gmail.com>"]
 description = "A TUI Git client built with Rust"
