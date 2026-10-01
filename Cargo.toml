@@ -2,6 +2,10 @@
 name = "rsgit"
 version = "0.1.0"
 edition = "2024"
+authors = ["Artem Stasyuk <stasyukartem2@gmail.com>"]
+description = "A TUI Git client built with Rust"
+repository = "https://github.com/xcroatoanx/rsgit"
+license = "MIT"
 
 [dependencies]
 color-eyre = "0.6.5"
