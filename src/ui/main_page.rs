@@ -5,6 +5,8 @@ use ratatui::{
     text::Line,
     widgets::{Block, BorderType, Borders, Widget},
 };
+use ratatui::style::Modifier;
+use ratatui::text::Span;
 use strum::{EnumCount, EnumIter, IntoEnumIterator};
 
 use crate::app::App;
@@ -12,7 +14,29 @@ use crate::ui::components::*;
 use crate::ui::popups::{render_about_popup, render_help_popup};
 
 pub fn create_block(app: &App, block_type: ActiveBlock) -> Block<'static> {
-    let title = Line::from(format!("[{}] {}", block_type.index(), block_type.title()));
+    let title = match block_type {
+        ActiveBlock::Branches => {
+            let mut spans = vec![
+                Span::raw(format!("[{}] {} ", block_type.index(), block_type.title())),
+            ];
+
+            for tab in BranchTab::iter() {
+                let style = if app.branch_tab == tab {
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(Color::DarkGray)
+                };
+
+                spans.push(Span::styled(format!("[{}] ", tab.label()), style));
+            }
+
+            Line::from(spans)
+        }
+        _ => Line::from(format!("[{}] {}", block_type.index(), block_type.title())),
+    };
+
     create_block_with_title(app, title, block_type)
 }
 
