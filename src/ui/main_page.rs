@@ -14,6 +14,8 @@ use crate::ui::components::*;
 use crate::ui::popups::{render_about_popup, render_help_popup};
 use crate::ui::popups::textinput::TextInputPopup;
 
+use crate::ui::popups::error::ErrorPopup;
+
 pub fn create_block(app: &App, block_type: ActiveBlock) -> Block<'static> {
     let title = match block_type {
         ActiveBlock::Branches => {
@@ -162,20 +164,16 @@ impl<'a> Widget for DashboardApp<'a> {
         LogsComponent { app: self.app }.render(right_2, buf);
         FooterComponent.render(shortcut_area, buf);
 
+        if let Some(ref err_msg) = self.app.error_message {
+            ErrorPopup { message: err_msg }.render(area, buf);
+            return;
+        }
+
         if self.app.show_create_popup {
             let (title, label) = match self.app.branch_tab {
-                BranchTab::Local => (
-                    "Create Local Branch",
-                    "Enter branch name (spaces convert to '-'):",
-                ),
-                BranchTab::Remote => (
-                    "Create Remote Branch",
-                    "Enter remote branch name (spaces convert to '-'):",
-                ),
-                BranchTab::Tags => (
-                    "Create Tag",
-                    "Enter tag name (spaces convert to '-'):",
-                ),
+                BranchTab::Local => ("Create Local Branch", "Enter branch name (spaces convert to '-'):"),
+                BranchTab::Remote => ("Create Remote Branch", "Enter remote branch name (spaces convert to '-'):"),
+                BranchTab::Tags => ("Create Tag", "Enter tag name (spaces convert to '-'):"),
             };
 
             TextInputPopup {
@@ -185,10 +183,17 @@ impl<'a> Widget for DashboardApp<'a> {
                 error: self.app.create_error_message.as_deref(),
             }
                 .render(area, buf);
-        } else if self.app.show_help {
+            return;
+        }
+
+        if self.app.show_help {
             render_help_popup(area, buf);
-        } else if self.app.show_about {
+            return;
+        }
+
+        if self.app.show_about {
             render_about_popup(area, buf);
+            return;
         }
     }
 }

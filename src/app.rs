@@ -26,6 +26,8 @@ pub struct App {
     pub show_rename_popup: bool,
     pub rename_input: String,
     pub rename_error_message: Option<String>,
+
+    pub error_message: Option<String>,
 }
 
 impl App {
@@ -100,7 +102,7 @@ impl App {
         if let Some(name) = self.get_selected_entity_name() {
             let target: GitTarget = self.branch_tab.into();
             if let Err(err) = GitData::checkout_entity(target, &name) {
-                eprintln!("Checkout error: {}", err);
+                self.error_message = Some(err);
             } else {
                 self.refresh_git();
             }
@@ -195,6 +197,16 @@ impl App {
             match key.code {
                 KeyCode::Enter | KeyCode::Char('y') => self.confirm_delete_selected_entity(),
                 KeyCode::Esc | KeyCode::Char('n') => self.show_delete_popup = false,
+                _ => {}
+            }
+            return;
+        }
+        
+        if self.error_message.is_some() {
+            match key.code {
+                KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q') => {
+                    self.error_message = None;
+                }
                 _ => {}
             }
             return;
