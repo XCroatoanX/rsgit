@@ -1,13 +1,15 @@
-use crate::app::App;
-use crate::ui::popups::{render_about_popup, render_help_popup};
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Layout, Rect},
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Paragraph, Widget},
+    style::{Color, Style},
+    text::Line,
+    widgets::{Block, BorderType, Borders, Widget},
 };
 use strum::{EnumCount, EnumIter, IntoEnumIterator};
+
+use crate::app::App;
+use crate::ui::components::*;
+use crate::ui::popups::{render_about_popup, render_help_popup};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, EnumIter, EnumCount)]
 pub enum ActiveBlock {
@@ -45,6 +47,10 @@ impl ActiveBlock {
     pub fn from_index(index: usize) -> Option<Self> {
         Self::iter().nth(index)
     }
+
+    pub fn index(self) -> usize {
+        Self::iter().position(|b| b == self).unwrap_or(0) + 1
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, EnumIter)]
@@ -81,8 +87,13 @@ pub struct DashboardApp<'a> {
     pub app: &'a App,
 }
 
-impl<'a> DashboardApp<'a> {
-    fn create_block(&self, title: Line<'static>, block_type: ActiveBlock) -> Block<'static> {
+impl DashboardApp<'_> {
+    pub fn create_block(&self, block_type: ActiveBlock) -> Block<'static> {
+        let title = Line::from(format!("[{}] {}", block_type.index(), block_type.title()));
+        self.create_block_with_title(title, block_type)
+    }
+
+    pub fn create_block_with_title(&self, title: Line<'static>, block_type: ActiveBlock) -> Block<'static> {
         let is_active = self.app.active_block == block_type;
         let border_color = if is_active {
             Color::LightGreen
@@ -95,46 +106,6 @@ impl<'a> DashboardApp<'a> {
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(border_color))
             .title(title)
-    }
-
-    fn format_branch_title(&self) -> Line<'static> {
-        let active_style = Style::default()
-            .fg(Color::Yellow)
-            .add_modifier(Modifier::BOLD);
-        let inactive_style = Style::default().fg(Color::DarkGray);
-
-        let mut spans = vec![Span::raw("[2] Branches ( ")];
-
-        for (i, tab) in BranchTab::iter().enumerate() {
-            if i > 0 {
-                spans.push(Span::raw(" | "));
-            }
-            let style = if self.app.branch_tab == tab {
-                active_style
-            } else {
-                inactive_style
-            };
-            let text = if self.app.branch_tab == tab {
-                format!("[{}]", tab.label())
-            } else {
-                tab.label().to_string()
-            };
-            spans.push(Span::styled(text, style));
-        }
-
-        spans.push(Span::raw(" )"));
-        Line::from(spans)
-    }
-
-    fn render_pane(&self, area: Rect, buf: &mut Buffer, block_type: ActiveBlock, content: &str) {
-        let index = ActiveBlock::iter()
-            .position(|b| b == block_type)
-            .unwrap_or(0)
-            + 1;
-        let title = Line::from(format!("[{}] {}", index, block_type.title()));
-        Paragraph::new(content)
-            .block(self.create_block(title, block_type))
-            .render(area, buf);
     }
 }
 
@@ -158,24 +129,12 @@ impl<'a> Widget for DashboardApp<'a> {
             Layout::vertical([Constraint::Percentage(60), Constraint::Percentage(40)])
                 .areas(right_col);
 
-        self.render_pane(left_1, buf, ActiveBlock::StagedFiles, "Staged files");
-
-        let branch_content = match self.app.branch_tab {
-            BranchTab::Local => "Local Branches: main*, feature/ui",
-            BranchTab::Remote => "Remote Branches: origin/main, origin/feature/ui",
-            BranchTab::Tags => "Tags: v0.1.0, v0.0.1",
-        };
-
-        Paragraph::new(branch_content)
-            .block(self.create_block(self.format_branch_title(), ActiveBlock::Branches))
-            .render(left_2, buf);
-
-        self.render_pane(left_3, buf, ActiveBlock::CommitHistory, "Commit history");
-        self.render_pane(right_1, buf, ActiveBlock::Diff, "Diff");
-        self.render_pane(right_2, buf, ActiveBlock::Logs, "Logs");
-
-        // Footer shortcuts bar
-        Paragraph::new("[q] Quit | [?] Help | [a] About").render(shortcut_area, buf);
+        StagedFilesComponent { app: self.app }.render(left_1, buf);
+        BranchesComponent { app: self.app }.render(left_2, buf);
+        CommitHistoryComponent { app: self.app }.render(left_3, buf);
+        DiffComponent { app: self.app }.render(right_1, buf);
+        LogsComponent { app: self.app }.render(right_2, buf);
+        FooterComponent.render(shortcut_area, buf);
 
         if self.app.show_help {
             render_help_popup(area, buf);

@@ -34,7 +34,6 @@ impl App {
         match key.code {
             KeyCode::Esc | KeyCode::Char('q') => self.should_quit = true,
 
-            // Cycle pane focus using Enum methods
             KeyCode::Tab | KeyCode::Down | KeyCode::Char('j') => {
                 self.active_block = self.active_block.next();
             }
