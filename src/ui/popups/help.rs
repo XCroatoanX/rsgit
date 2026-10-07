@@ -12,16 +12,22 @@ const BOLD: Style = Style::new().add_modifier(Modifier::BOLD);
 
 pub fn render_help_popup(area: Rect, buf: &mut Buffer) {
     let help_text = [
-        Line::from(Span::styled("Shortcuts", BOLD)),
+        Line::from(Span::styled("Navigation", BOLD)),
+        Line::from(" [1-5]    Jump to Pane"),
+        Line::from(" [Tab/h/l] Switch Panes"),
+        Line::from(" [j/k]    Navigate List Items"),
+        Line::from(" [[/]]    Switch Tabs (Local/Remote/Tags)"),
         Line::from(""),
-        Line::from(" [1-5]  Select Pane"),
-        Line::from(" [Tab]  Next Pane"),
-        Line::from(" [h/l]  Navigation between panes"),
-        Line::from(" [[/]]  Navigation inside pane"),
-        Line::from(" [?]    Toggle Help"),
-        Line::from(" [a]    Toggle About"),
-        Line::from(" [q]    Quit Application"),
-        Line::from(" [Esc]  Close Popups / Quit"),
+        Line::from(Span::styled("Branch / Tag Actions", BOLD)),
+        Line::from(" [Enter]  Checkout / Switch Target"),
+        Line::from(" [n]      Create New Branch / Tag"),
+        Line::from(" [r]      Rename Selected Item"),
+        Line::from(" [d]      Delete Selected Item"),
+        Line::from(""),
+        Line::from(Span::styled("General", BOLD)),
+        Line::from(" [?]      Toggle Help"),
+        Line::from(" [a]      Toggle About"),
+        Line::from(" [q/Esc]  Close Popup / Quit"),
     ];
 
     let centered_area = get_dynamic_popup_area(area, &help_text, 4, 2);

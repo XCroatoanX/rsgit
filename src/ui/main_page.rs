@@ -12,6 +12,7 @@ use strum::{EnumCount, EnumIter, IntoEnumIterator};
 use crate::app::App;
 use crate::ui::components::*;
 use crate::ui::popups::{render_about_popup, render_help_popup};
+use crate::ui::popups::textinput::TextInputPopup;
 
 pub fn create_block(app: &App, block_type: ActiveBlock) -> Block<'static> {
     let title = match block_type {
@@ -161,7 +162,30 @@ impl<'a> Widget for DashboardApp<'a> {
         LogsComponent { app: self.app }.render(right_2, buf);
         FooterComponent.render(shortcut_area, buf);
 
-        if self.app.show_help {
+        if self.app.show_create_popup {
+            let (title, label) = match self.app.branch_tab {
+                BranchTab::Local => (
+                    "Create Local Branch",
+                    "Enter branch name (spaces convert to '-'):",
+                ),
+                BranchTab::Remote => (
+                    "Create Remote Branch",
+                    "Enter remote branch name (spaces convert to '-'):",
+                ),
+                BranchTab::Tags => (
+                    "Create Tag",
+                    "Enter tag name (spaces convert to '-'):",
+                ),
+            };
+
+            TextInputPopup {
+                title,
+                label,
+                input: &self.app.new_entity_input,
+                error: self.app.create_error_message.as_deref(),
+            }
+                .render(area, buf);
+        } else if self.app.show_help {
             render_help_popup(area, buf);
         } else if self.app.show_about {
             render_about_popup(area, buf);
