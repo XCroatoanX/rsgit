@@ -5,7 +5,7 @@ use ratatui::{
 };
 
 use crate::app::App;
-use crate::ui::ActiveBlock;
+use crate::ui::{ActiveBlock, main_page::create_block};
 
 pub struct FilesComponent<'a> {
     pub app: &'a App,
@@ -13,7 +13,7 @@ pub struct FilesComponent<'a> {
 
 impl<'a> Widget for FilesComponent<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let block = self.app.create_block(ActiveBlock::Files);
+        let block = create_block(self.app, ActiveBlock::Files);
 
         Paragraph::new("Files").block(block).render(area, buf);
     }

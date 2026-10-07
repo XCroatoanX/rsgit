@@ -5,7 +5,7 @@ use ratatui::{
 };
 
 use crate::app::App;
-use crate::ui::ActiveBlock;
+use crate::ui::{ActiveBlock, main_page::create_block};
 
 pub struct LogsComponent<'a> {
     pub app: &'a App,
@@ -13,10 +13,8 @@ pub struct LogsComponent<'a> {
 
 impl<'a> Widget for LogsComponent<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let block = self.app.create_block(ActiveBlock::Logs);
+        let block = create_block(self.app, ActiveBlock::Logs);
 
-        Paragraph::new("Logs")
-            .block(block)
-            .render(area, buf);
+        Paragraph::new("Logs").block(block).render(area, buf);
     }
 }

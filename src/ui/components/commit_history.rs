@@ -5,7 +5,7 @@ use ratatui::{
 };
 
 use crate::app::App;
-use crate::ui::ActiveBlock;
+use crate::ui::{ActiveBlock, main_page::create_block};
 
 pub struct CommitHistoryComponent<'a> {
     pub app: &'a App,
@@ -13,7 +13,7 @@ pub struct CommitHistoryComponent<'a> {
 
 impl<'a> Widget for CommitHistoryComponent<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let block = self.app.create_block(ActiveBlock::CommitHistory);
+        let block = create_block(self.app, ActiveBlock::CommitHistory);
 
         Paragraph::new("Commit history")
             .block(block)

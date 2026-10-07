@@ -5,7 +5,7 @@ use ratatui::{
 };
 
 use crate::app::App;
-use crate::ui::ActiveBlock;
+use crate::ui::{ActiveBlock, main_page::create_block};
 
 pub struct DiffComponent<'a> {
     pub app: &'a App,
@@ -13,10 +13,8 @@ pub struct DiffComponent<'a> {
 
 impl<'a> Widget for DiffComponent<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let block = self.app.create_block(ActiveBlock::Diff);
+        let block = create_block(self.app, ActiveBlock::Diff);
 
-        Paragraph::new("Diff")
-            .block(block)
-            .render(area, buf);
+        Paragraph::new("Diff").block(block).render(area, buf);
     }
 }

@@ -8,7 +8,7 @@ use ratatui::{
 use strum::IntoEnumIterator;
 
 use crate::app::App;
-use crate::ui::{ActiveBlock, BranchTab};
+use crate::ui::{ActiveBlock, BranchTab, main_page::create_block_with_title};
 
 pub struct BranchesComponent<'a> {
     pub app: &'a App,
@@ -48,7 +48,7 @@ impl<'a> BranchesComponent<'a> {
 impl<'a> Widget for BranchesComponent<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let title = self.format_title();
-        let block = self.app.create_block_with_title(title, ActiveBlock::Branches);
+        let block = create_block_with_title(self.app, title, ActiveBlock::Branches);
 
         let branch_content = match self.app.branch_tab {
             BranchTab::Local => "Local Branches: main*, feature/ui",

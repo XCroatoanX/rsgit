@@ -11,10 +11,33 @@ use crate::app::App;
 use crate::ui::components::*;
 use crate::ui::popups::{render_about_popup, render_help_popup};
 
+pub fn create_block(app: &App, block_type: ActiveBlock) -> Block<'static> {
+    let title = Line::from(format!("[{}] {}", block_type.index(), block_type.title()));
+    create_block_with_title(app, title, block_type)
+}
+
+pub fn create_block_with_title(
+    app: &App,
+    title: Line<'static>,
+    block_type: ActiveBlock,
+) -> Block<'static> {
+    let border_color = if app.active_block == block_type {
+        Color::LightGreen
+    } else {
+        Color::DarkGray
+    };
+
+    Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(border_color))
+        .title(title)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, EnumIter, EnumCount)]
 pub enum ActiveBlock {
     #[default]
-    StagedFiles,
+    Files,
     Branches,
     CommitHistory,
     Diff,
@@ -24,7 +47,7 @@ pub enum ActiveBlock {
 impl ActiveBlock {
     pub fn title(self) -> &'static str {
         match self {
-            Self::StagedFiles => "Staged files",
+            Self::Files => "Files",
             Self::Branches => "Branches",
             Self::CommitHistory => "Commit history",
             Self::Diff => "Diff",
@@ -87,28 +110,6 @@ pub struct DashboardApp<'a> {
     pub app: &'a App,
 }
 
-impl DashboardApp<'_> {
-    pub fn create_block(&self, block_type: ActiveBlock) -> Block<'static> {
-        let title = Line::from(format!("[{}] {}", block_type.index(), block_type.title()));
-        self.create_block_with_title(title, block_type)
-    }
-
-    pub fn create_block_with_title(&self, title: Line<'static>, block_type: ActiveBlock) -> Block<'static> {
-        let is_active = self.app.active_block == block_type;
-        let border_color = if is_active {
-            Color::LightGreen
-        } else {
-            Color::DarkGray
-        };
-
-        Block::default()
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(border_color))
-            .title(title)
-    }
-}
-
 impl<'a> Widget for DashboardApp<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let [main_area, shortcut_area] =
@@ -129,7 +130,7 @@ impl<'a> Widget for DashboardApp<'a> {
             Layout::vertical([Constraint::Percentage(60), Constraint::Percentage(40)])
                 .areas(right_col);
 
-        StagedFilesComponent { app: self.app }.render(left_1, buf);
+        FilesComponent { app: self.app }.render(left_1, buf);
         BranchesComponent { app: self.app }.render(left_2, buf);
         CommitHistoryComponent { app: self.app }.render(left_3, buf);
         DiffComponent { app: self.app }.render(right_1, buf);

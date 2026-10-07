@@ -8,6 +8,6 @@ pub mod logs;
 pub use branches::BranchesComponent;
 pub use commit_history::CommitHistoryComponent;
 pub use diff::DiffComponent;
+pub use files::FilesComponent;
 pub use footer::FooterComponent;
 pub use logs::LogsComponent;
-pub use staged_files::FilesComponent;
