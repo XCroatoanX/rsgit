@@ -1,4 +1,5 @@
 use std::process::Command;
+use rayon::prelude::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BranchInfo {
@@ -39,37 +40,45 @@ impl GitData {
             tags: Self::get_output(&["tag", "-l"]),
         }
     }
+
     pub fn fetch_local_branches() -> Vec<BranchInfo> {
         let output = Command::new("git")
             .args(["branch", "--format=%(HEAD)|%(refname:short)"])
             .output();
 
-        let mut branches = Vec::new();
-
-        if let Ok(out) = output {
-            if out.status.success() {
-                let stdout = String::from_utf8_lossy(&out.stdout);
-                for line in stdout.lines() {
-                    let parts: Vec<&str> = line.split('|').collect();
-                    if parts.len() >= 2 {
-                        let is_head = parts[0].trim() == "*";
-                        let name = parts[1].trim().to_string();
-
-                        // Query exact ahead/behind count for this specific branch
-                        let (ahead, behind) = Self::get_branch_counts(&name);
-
-                        branches.push(BranchInfo {
-                            name,
-                            ahead,
-                            behind,
-                            is_head,
-                        });
-                    }
-                }
-            }
+        let Ok(out) = output else { return Vec::new() };
+        if !out.status.success() {
+            return Vec::new();
         }
 
-        branches
+        let stdout = String::from_utf8_lossy(&out.stdout);
+
+        let raw_branches: Vec<(bool, String)> = stdout
+            .lines()
+            .filter_map(|line| {
+                let parts: Vec<&str> = line.split('|').collect();
+                if parts.len() >= 2 {
+                    let is_head = parts[0].trim() == "*";
+                    let name = parts[1].trim().to_string();
+                    Some((is_head, name))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        raw_branches
+            .into_par_iter()
+            .map(|(is_head, name)| {
+                let (ahead, behind) = Self::get_branch_counts(&name);
+                BranchInfo {
+                    name,
+                    ahead,
+                    behind,
+                    is_head,
+                }
+            })
+            .collect()
     }
 
     fn get_branch_counts(branch: &str) -> (usize, usize) {
