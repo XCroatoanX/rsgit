@@ -7,3 +7,5 @@
 
 `cargo fmt`\
 `cargo clippy --fix`
+
+test
