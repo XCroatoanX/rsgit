@@ -1,4 +1,7 @@
 mod app;
+mod events;
+mod git;
+mod popups;
 mod startup;
 mod ui;
 
@@ -8,6 +11,7 @@ use color_eyre::Result;
 use crossterm::event::{self, Event, KeyEventKind};
 use ratatui::DefaultTerminal;
 use std::env;
+use std::time::Duration;
 use ui::DashboardApp;
 
 fn main() -> Result<()> {
@@ -27,22 +31,24 @@ fn main() -> Result<()> {
 }
 
 fn run(terminal: &mut DefaultTerminal) -> Result<()> {
-    let mut app = App::default();
+    let mut app = App::new();
 
     loop {
         terminal.draw(|frame| {
             frame.render_widget(DashboardApp { app: &app }, frame.area());
         })?;
-
-        if let Event::Key(key) = event::read()?
-            && key.kind == KeyEventKind::Press
-        {
-            app.handle_key_event(key);
-            if app.should_quit {
-                break;
+        if event::poll(Duration::from_millis(100))? {
+            if let Event::Key(key) = event::read()?
+                && key.kind == KeyEventKind::Press
+            {
+                events::handle_key_event(&mut app, key);
+                if app.should_quit {
+                    break;
+                }
             }
+        } else {
+            app.tick();
         }
     }
-
     Ok(())
 }
