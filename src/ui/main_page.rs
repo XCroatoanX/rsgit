@@ -278,7 +278,6 @@ impl<'a> Widget for DashboardApp<'a> {
                 error: self.app.rename_warning.as_deref(),
             }
             .render(area, buf);
-            return;
         }
     }
 }

@@ -21,7 +21,7 @@ impl<'a> BranchesComponent<'a> {
             .app
             .active_sync
             .as_ref()
-            .map_or(false, |sync| sync.branch_name == name);
+            .is_some_and(|sync| sync.branch_name == name);
 
         if is_syncing {
             let sync = self.app.active_sync.as_ref().unwrap();

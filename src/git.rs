@@ -121,8 +121,8 @@ impl GitData {
             .args(["rev-list", "--left-right", "--count", range])
             .output();
 
-        if let Ok(out) = output {
-            if out.status.success() {
+        if let Ok(out) = output
+            && out.status.success() {
                 let stdout = String::from_utf8_lossy(&out.stdout);
                 let parts: Vec<&str> = stdout.split_whitespace().collect();
                 if parts.len() == 2 {
@@ -131,7 +131,6 @@ impl GitData {
                     return Some((ahead, behind));
                 }
             }
-        }
 
         None
     }
