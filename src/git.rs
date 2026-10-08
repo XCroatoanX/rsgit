@@ -59,7 +59,7 @@ impl GitData {
 
     pub fn fetch_remotes() -> Result<(), String> {
         let output = std::process::Command::new("git")
-            .args(["fetch", "--prune"])
+            .args(["fetch", "--prune", "--tags"])
             .output()
             .map_err(|e| e.to_string())?;
 
