@@ -29,10 +29,7 @@ impl<'a> Widget for ErrorPopup<'a> {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .margin(1)
-            .constraints([
-                Constraint::Min(1),
-                Constraint::Length(1),
-            ])
+            .constraints([Constraint::Min(1), Constraint::Length(1)])
             .split(inner);
 
         Paragraph::new(self.message)

@@ -19,7 +19,11 @@ impl<'a> Widget for ConfirmPopup<'a> {
 
         let block = Block::default()
             .title(format!(" {} ", self.title))
-            .title_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+            .title_style(
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(Color::Yellow))
@@ -35,10 +39,7 @@ impl<'a> Widget for ConfirmPopup<'a> {
                 Constraint::Length(1),
             ]
         } else {
-            vec![
-                Constraint::Min(2),
-                Constraint::Length(1),
-            ]
+            vec![Constraint::Min(2), Constraint::Length(1)]
         };
 
         let chunks = Layout::default()
@@ -72,10 +73,5 @@ impl<'a> Widget for ConfirmPopup<'a> {
 fn centered_rect(width_chars: u16, height_lines: u16, r: Rect) -> Rect {
     let x = r.x + (r.width.saturating_sub(width_chars)) / 2;
     let y = r.y + (r.height.saturating_sub(height_lines)) / 2;
-    Rect::new(
-        x,
-        y,
-        width_chars.min(r.width),
-        height_lines.min(r.height),
-    )
+    Rect::new(x, y, width_chars.min(r.width), height_lines.min(r.height))
 }

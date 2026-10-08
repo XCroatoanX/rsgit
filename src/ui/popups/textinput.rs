@@ -16,7 +16,7 @@ pub struct TextInputPopup<'a> {
 impl<'a> Widget for TextInputPopup<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let popup_area = centered_rect(60, 11, area);
-        
+
         Clear.render(popup_area, buf);
 
         let border_color = if self.error.is_some() {
@@ -55,11 +55,11 @@ impl<'a> Widget for TextInputPopup<'a> {
                 Constraint::Min(1),
             ])
             .split(padded_chunks[1]);
-        
+
         Paragraph::new(self.label)
             .style(Style::default().fg(Color::Gray))
             .render(chunks[0], buf);
-        
+
         let input_spans = Line::from(vec![
             Span::raw(self.input),
             Span::styled(" ", Style::default().bg(Color::Yellow).fg(Color::Black)),
@@ -72,13 +72,10 @@ impl<'a> Widget for TextInputPopup<'a> {
                 .border_style(Style::default().fg(Color::Yellow)),
         );
         input_widget.render(chunks[2], buf);
-        
+
         if let Some(err) = self.error {
-            let err_widget = Paragraph::new(format!("Error: {}", err)).style(
-                Style::default()
-                    .fg(Color::Red)
-                    .add_modifier(Modifier::BOLD),
-            );
+            let err_widget = Paragraph::new(format!("Error: {}", err))
+                .style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD));
             err_widget.render(chunks[3], buf);
         } else {
             let hint = Paragraph::new("[Enter] Submit  |  [Esc] Cancel")

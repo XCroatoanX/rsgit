@@ -25,7 +25,11 @@ impl<'a> Widget for SelectionPopup<'a> {
 
         let block = Block::default()
             .title(format!(" {} ", self.title))
-            .title_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+            .title_style(
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(Color::Yellow));
@@ -53,7 +57,9 @@ impl<'a> Widget for SelectionPopup<'a> {
                     .fg(Color::DarkGray)
                     .add_modifier(Modifier::CROSSED_OUT)
             } else if is_selected {
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::White)
             };
