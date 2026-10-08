@@ -1,4 +1,4 @@
-use crate::git::{GitData, GitTarget};
+use crate::git::{CommitLine, GitData, GitTarget};
 use crate::ui::main_page::{ActiveBlock, BranchTab};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread;
@@ -41,6 +41,10 @@ pub struct App {
     pub selected_commit_index: usize,
 
     pub git_data: GitData,
+    pub branch_history: Vec<CommitLine>,
+    pub checked_out_history: Vec<CommitLine>,
+    pub commit_diff: Vec<String>,
+    pub selected_diff_index: usize,
     pub should_quit: bool,
     pub tick_count: usize,
 
@@ -99,6 +103,8 @@ impl App {
                 GitWorkerResult::RefreshCompleted(git_data) => {
                     self.git_data = git_data;
                     self.refresh_in_progress = false;
+                    self.refresh_branch_history();
+                    self.refresh_checked_out_history();
                 }
                 GitWorkerResult::SyncCompleted {
                     branch,
@@ -205,6 +211,42 @@ impl App {
         }
     }
 
+    pub fn refresh_branch_history(&mut self) {
+        self.branch_history = self
+            .get_selected_entity_name()
+            .map(|name| GitData::fetch_history(&name))
+            .unwrap_or_default();
+        self.selected_diff_index = self
+            .selected_diff_index
+            .min(self.branch_history.len().saturating_sub(1));
+    }
+
+    pub fn refresh_checked_out_history(&mut self) {
+        self.checked_out_history = GitData::fetch_checked_out_history();
+        self.selected_commit_index = self
+            .selected_commit_index
+            .min(self.checked_out_history.len().saturating_sub(1));
+        self.refresh_commit_diff();
+    }
+
+    pub fn refresh_commit_diff(&mut self) {
+        self.commit_diff = self
+            .checked_out_history
+            .get(self.selected_commit_index)
+            .and_then(|commit| commit.hash.as_deref())
+            .map(GitData::fetch_commit_diff)
+            .unwrap_or_default();
+        self.selected_diff_index = self
+            .selected_diff_index
+            .min(self.commit_diff.len().saturating_sub(1));
+    }
+
+    pub fn select_branch_tab(&mut self, branch_tab: BranchTab) {
+        self.branch_tab = branch_tab;
+        self.selected_branch_index = 0;
+        self.refresh_branch_history();
+    }
+
     pub fn checkout_selected_entity(&mut self) {
         if let Some(name) = self.get_selected_entity_name() {
             let target: GitTarget = self.branch_tab.into();
@@ -228,10 +270,24 @@ impl App {
                 let count = self.get_branch_count();
                 if count > 0 {
                     self.selected_branch_index = (self.selected_branch_index + 1) % count;
+                    self.refresh_branch_history();
                 }
             }
             ActiveBlock::Files => {}
-            ActiveBlock::CommitHistory => {}
+            ActiveBlock::CommitHistory => {
+                if !self.checked_out_history.is_empty() {
+                    self.selected_commit_index =
+                        (self.selected_commit_index + 1) % self.checked_out_history.len();
+                    self.selected_diff_index = 0;
+                    self.refresh_commit_diff();
+                }
+            }
+            ActiveBlock::Diff => {
+                if !self.commit_diff.is_empty() {
+                    self.selected_diff_index =
+                        (self.selected_diff_index + 1) % self.commit_diff.len();
+                }
+            }
             _ => {}
         }
     }
@@ -246,13 +302,23 @@ impl App {
                     } else {
                         self.selected_branch_index - 1
                     };
+                    self.refresh_branch_history();
                 }
             }
             ActiveBlock::Files => {
                 self.selected_file_index = self.selected_file_index.saturating_sub(1);
             }
             ActiveBlock::CommitHistory => {
-                self.selected_commit_index = self.selected_commit_index.saturating_sub(1);
+                if self.selected_commit_index > 0 {
+                    self.selected_commit_index -= 1;
+                    self.selected_diff_index = 0;
+                    self.refresh_commit_diff();
+                }
+            }
+            ActiveBlock::Diff => {
+                if !self.commit_diff.is_empty() {
+                    self.selected_diff_index = self.selected_diff_index.saturating_sub(1);
+                }
             }
             _ => {}
         }

@@ -21,12 +21,10 @@ pub fn handle_global_keys(app: &mut App, key: KeyEvent) {
         }
 
         KeyCode::Char('[') if app.active_block == ActiveBlock::Branches => {
-            app.branch_tab = app.branch_tab.previous();
-            app.selected_branch_index = 0;
+            app.select_branch_tab(app.branch_tab.next());
         }
         KeyCode::Char(']') if app.active_block == ActiveBlock::Branches => {
-            app.branch_tab = app.branch_tab.next();
-            app.selected_branch_index = 0;
+            app.select_branch_tab(app.branch_tab.next());
         }
 
         KeyCode::Char('n') if app.active_block == ActiveBlock::Branches => {

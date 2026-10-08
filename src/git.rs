@@ -32,6 +32,14 @@ pub struct GitData {
     pub tags: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommitLine {
+    pub graph: String,
+    pub hash: Option<String>,
+    pub author: Option<String>,
+    pub subject: Option<String>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GitTarget {
     LocalBranch,
@@ -122,15 +130,16 @@ impl GitData {
             .output();
 
         if let Ok(out) = output
-            && out.status.success() {
-                let stdout = String::from_utf8_lossy(&out.stdout);
-                let parts: Vec<&str> = stdout.split_whitespace().collect();
-                if parts.len() == 2 {
-                    let ahead = parts[0].parse::<usize>().unwrap_or(0);
-                    let behind = parts[1].parse::<usize>().unwrap_or(0);
-                    return Some((ahead, behind));
-                }
+            && out.status.success()
+        {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            let parts: Vec<&str> = stdout.split_whitespace().collect();
+            if parts.len() == 2 {
+                let ahead = parts[0].parse::<usize>().unwrap_or(0);
+                let behind = parts[1].parse::<usize>().unwrap_or(0);
+                return Some((ahead, behind));
             }
+        }
 
         None
     }
@@ -145,6 +154,74 @@ impl GitData {
                 .filter(|s| !s.is_empty())
                 .collect(),
             _ => vec![],
+        }
+    }
+
+    pub fn fetch_history(target: &str) -> Vec<CommitLine> {
+        let lines = Self::get_output(&[
+            "log",
+            "--graph",
+            "--no-decorate",
+            "--pretty=format:%x01%h%x1f%an%x1f%s",
+            "-50",
+            target,
+        ]);
+
+        lines
+            .into_iter()
+            .map(|line| {
+                if let Some((graph, commit)) = line.split_once('\x01') {
+                    let mut fields = commit.splitn(3, '\x1f');
+                    CommitLine {
+                        graph: graph.to_string(),
+                        hash: fields.next().map(str::to_string),
+                        author: fields.next().map(str::to_string),
+                        subject: fields.next().map(str::to_string),
+                    }
+                } else {
+                    CommitLine {
+                        graph: line,
+                        hash: None,
+                        author: None,
+                        subject: None,
+                    }
+                }
+            })
+            .collect()
+    }
+
+    pub fn fetch_checked_out_history() -> Vec<CommitLine> {
+        let output = Command::new("git")
+            .args(["symbolic-ref", "--quiet", "--short", "HEAD"])
+            .output();
+
+        let Ok(output) = output else {
+            return Vec::new();
+        };
+
+        if !output.status.success() {
+            return Vec::new();
+        }
+
+        let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if branch.is_empty() {
+            Vec::new()
+        } else {
+            Self::fetch_history(&branch)
+        }
+    }
+
+    pub fn fetch_commit_diff(commit: &str) -> Vec<String> {
+        let output = Command::new("git")
+            .args(["show", "--format=", "--no-ext-diff", "--no-color", commit])
+            .output();
+
+        match output {
+            Ok(output) if output.status.success() => String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .map(str::to_string)
+                .collect(),
+            _ => Vec::new(),
         }
     }
 
