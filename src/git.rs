@@ -211,6 +211,20 @@ impl GitData {
         }
     }
 
+    pub fn fetch_commit_diff(commit: &str) -> Vec<String> {
+        let output = Command::new("git")
+            .args(["show", "--format=", "--no-ext-diff", "--no-color", commit])
+            .output();
+
+        match output {
+            Ok(output) if output.status.success() => String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .map(str::to_string)
+                .collect(),
+            _ => Vec::new(),
+        }
+    }
+
     pub fn create_entity(target: GitTarget, name: &str) -> Result<(), String> {
         let name = name.replace(' ', "-");
         let name = name.trim();

@@ -18,7 +18,7 @@ impl<'a> Widget for DiffComponent<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let title = match self.app.active_block {
             ActiveBlock::Branches => "Log",
-            ActiveBlock::CommitHistory => "Commit diff",
+            ActiveBlock::CommitHistory | ActiveBlock::Diff => "Commit diff",
             _ => "Diff",
         };
         let block = create_block_with_title(
@@ -27,7 +27,20 @@ impl<'a> Widget for DiffComponent<'a> {
             ActiveBlock::Diff,
         );
 
-        let items = if let Some(branch) = self.app.get_selected_entity_name() {
+        let items = if matches!(
+            self.app.active_block,
+            ActiveBlock::CommitHistory | ActiveBlock::Diff
+        ) {
+            if self.app.commit_diff.is_empty() {
+                vec![ListItem::new("No changes found for the selected commit")]
+            } else {
+                self.app
+                    .commit_diff
+                    .iter()
+                    .map(|line| diff_item(line))
+                    .collect()
+            }
+        } else if let Some(branch) = self.app.get_selected_entity_name() {
             if self.app.branch_history.is_empty() {
                 vec![ListItem::new(format!("No commits found for {branch}"))]
             } else {
@@ -43,11 +56,36 @@ impl<'a> Widget for DiffComponent<'a> {
             .highlight_symbol("> ");
 
         let mut state = ListState::default();
-        if !self.app.branch_history.is_empty() {
+        if matches!(
+            self.app.active_block,
+            ActiveBlock::CommitHistory | ActiveBlock::Diff
+        ) {
+            if !self.app.commit_diff.is_empty() {
+                state.select(Some(self.app.selected_diff_index));
+            }
+        } else if !self.app.branch_history.is_empty() {
             state.select(Some(self.app.selected_diff_index));
         }
         ratatui::widgets::StatefulWidget::render(list, area, buf, &mut state);
     }
+}
+
+fn diff_item(line: &str) -> ListItem<'static> {
+    let color = if line.starts_with("+++") || line.starts_with("---") {
+        Color::Yellow
+    } else if line.starts_with('+') {
+        Color::Green
+    } else if line.starts_with('-') {
+        Color::Red
+    } else if line.starts_with("@@") {
+        Color::Cyan
+    } else if line.starts_with("diff ") || line.starts_with("index ") {
+        Color::Magenta
+    } else {
+        Color::White
+    };
+
+    ListItem::new(Span::styled(line.to_string(), Style::default().fg(color)))
 }
 
 fn commit_item(commit: &CommitLine) -> ListItem<'static> {
