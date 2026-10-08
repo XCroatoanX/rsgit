@@ -102,12 +102,15 @@ impl App {
         }
 
         self.show_delete_popup = false;
-        let result = match scope {
-            DeleteScope::LocalOnly => GitData::delete_entity(GitTarget::LocalBranch, &name),
-            DeleteScope::RemoteOnly => GitData::delete_entity(GitTarget::RemoteBranch, &name),
-            DeleteScope::Both => GitData::delete_entity(GitTarget::LocalBranch, &name)
+        let result = match (self.branch_tab, scope) {
+            (BranchTab::Tags, DeleteScope::LocalOnly) => {
+                GitData::delete_entity(GitTarget::Tag, &name)
+            }
+            (_, DeleteScope::LocalOnly) => GitData::delete_entity(GitTarget::LocalBranch, &name),
+            (_, DeleteScope::RemoteOnly) => GitData::delete_entity(GitTarget::RemoteBranch, &name),
+            (_, DeleteScope::Both) => GitData::delete_entity(GitTarget::LocalBranch, &name)
                 .and(GitData::delete_entity(GitTarget::RemoteBranch, &name)),
-            DeleteScope::Cancel => Ok(()),
+            (_, DeleteScope::Cancel) => Ok(()),
         };
 
         if let Err(err) = result {
