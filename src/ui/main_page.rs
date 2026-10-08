@@ -81,20 +81,24 @@ impl ActiveBlock {
             Self::Branches => "Branches",
             Self::CommitHistory => "Commit history",
             Self::Diff => "Diff",
-            Self::Logs => "Git Logs",
+            Self::Logs => "Git",
         }
     }
 
     pub fn next(self) -> Self {
-        let all = Self::iter().collect::<Vec<_>>();
-        let pos = all.iter().position(|&x| x == self).unwrap_or(0);
-        all[(pos + 1) % all.len()]
+        match self {
+            Self::Files => Self::Branches,
+            Self::Branches => Self::CommitHistory,
+            Self::CommitHistory | Self::Diff | Self::Logs => Self::Files,
+        }
     }
 
     pub fn previous(self) -> Self {
-        let all = Self::iter().collect::<Vec<_>>();
-        let pos = all.iter().position(|&x| x == self).unwrap_or(0);
-        all[(pos + all.len() - 1) % all.len()]
+        match self {
+            Self::Files | Self::Diff | Self::Logs => Self::CommitHistory,
+            Self::Branches => Self::Files,
+            Self::CommitHistory => Self::Branches,
+        }
     }
 
     pub fn from_index(index: usize) -> Option<Self> {
