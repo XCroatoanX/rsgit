@@ -165,7 +165,7 @@ impl<'a> Widget for DashboardApp<'a> {
         CommitHistoryComponent { app: self.app }.render(left_3, buf);
         DiffComponent { app: self.app }.render(right_1, buf);
         LogsComponent { app: self.app }.render(right_2, buf);
-        FooterComponent.render(shortcut_area, buf);
+        FooterComponent { app: self.app }.render(shortcut_area, buf);
 
         if let Some(ref err_msg) = self.app.error_message {
             ErrorPopup { message: err_msg }.render(area, buf);
