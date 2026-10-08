@@ -1,5 +1,7 @@
 mod app;
+mod events;
 mod git;
+mod popups;
 mod startup;
 mod ui;
 
@@ -39,7 +41,7 @@ fn run(terminal: &mut DefaultTerminal) -> Result<()> {
             if let Event::Key(key) = event::read()?
                 && key.kind == KeyEventKind::Press
             {
-                app.handle_key_event(key);
+                events::handle_key_event(&mut app, key);
                 if app.should_quit {
                     break;
                 }
