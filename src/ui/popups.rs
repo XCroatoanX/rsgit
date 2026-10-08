@@ -1,8 +1,9 @@
 pub mod about;
 pub mod help;
 pub mod textinput;
-
+pub mod confirm;
 pub mod error;
+pub mod selection;
 
 pub use about::render_about_popup;
 pub use help::render_help_popup;

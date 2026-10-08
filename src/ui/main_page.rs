@@ -12,9 +12,11 @@ use strum::{EnumCount, EnumIter, IntoEnumIterator};
 use crate::app::App;
 use crate::ui::components::*;
 use crate::ui::popups::{render_about_popup, render_help_popup};
+use crate::ui::popups::confirm::ConfirmPopup;
 use crate::ui::popups::textinput::TextInputPopup;
 
 use crate::ui::popups::error::ErrorPopup;
+use crate::ui::popups::selection::{SelectionOption, SelectionPopup};
 
 pub fn create_block(app: &App, block_type: ActiveBlock) -> Block<'static> {
     let title = match block_type {
@@ -151,7 +153,7 @@ impl<'a> Widget for DashboardApp<'a> {
             Constraint::Fill(1),
             Constraint::Fill(1),
         ])
-        .areas(left_col);
+            .areas(left_col);
 
         let [right_1, right_2] =
             Layout::vertical([Constraint::Percentage(60), Constraint::Percentage(40)])
@@ -166,6 +168,25 @@ impl<'a> Widget for DashboardApp<'a> {
 
         if let Some(ref err_msg) = self.app.error_message {
             ErrorPopup { message: err_msg }.render(area, buf);
+            return;
+        }
+
+        if self.app.show_delete_popup {
+            if let Some(name) = self.app.get_selected_entity_name() {
+                let title = match self.app.branch_tab {
+                    BranchTab::Local => "Delete Local Branch",
+                    BranchTab::Remote => "Delete Remote Branch",
+                    BranchTab::Tags => "Delete Tag",
+                };
+                let message = format!("Are you sure you want to delete '{}'?", name);
+
+                ConfirmPopup {
+                    title,
+                    message: &message,
+                    error: self.app.delete_error_message.as_deref(),
+                }
+                    .render(area, buf);
+            }
             return;
         }
 
@@ -186,6 +207,23 @@ impl<'a> Widget for DashboardApp<'a> {
             return;
         }
 
+        if self.app.show_rename_popup {
+            let (title, label) = match self.app.branch_tab {
+                BranchTab::Local => ("Rename Local Branch", "Enter new branch name:"),
+                BranchTab::Remote => ("Rename Remote Branch", "Enter new remote branch name:"),
+                BranchTab::Tags => ("Rename Tag", "Enter new tag name:"),
+            };
+
+            TextInputPopup {
+                title,
+                label,
+                input: &self.app.rename_input,
+                error: self.app.rename_error_message.as_deref(),
+            }
+                .render(area, buf);
+            return;
+        }
+
         if self.app.show_help {
             render_help_popup(area, buf);
             return;
@@ -193,6 +231,38 @@ impl<'a> Widget for DashboardApp<'a> {
 
         if self.app.show_about {
             render_about_popup(area, buf);
+            return;
+        }
+
+        if self.app.show_delete_popup {
+            let options: Vec<SelectionOption> = self
+                .app
+                .delete_options
+                .iter()
+                .map(|(_, label, enabled)| SelectionOption {
+                    label,
+                    enabled: *enabled,
+                })
+                .collect();
+
+            SelectionPopup {
+                title: "Delete Options",
+                options: &options,
+                selected_index: self.app.delete_selected_index,
+                warning: None,
+            }
+                .render(area, buf);
+            return;
+        }
+
+        if self.app.show_rename_popup {
+            TextInputPopup {
+                title: "Rename Branch",
+                label: "Enter new branch name:",
+                input: &self.app.rename_input,
+                error: self.app.rename_warning.as_deref(),
+            }
+                .render(area, buf);
             return;
         }
     }

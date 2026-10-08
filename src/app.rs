@@ -1,6 +1,14 @@
-use crate::git::{GitTarget, GitData};
+use crate::git::{GitData, GitTarget};
 use crate::ui::main_page::{ActiveBlock, BranchTab};
 use crossterm::event::{KeyCode, KeyEvent};
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum DeleteScope {
+    LocalOnly,
+    RemoteOnly,
+    Both,
+    Cancel,
+}
 
 #[derive(Debug, Default)]
 pub struct App {
@@ -16,15 +24,19 @@ pub struct App {
 
     pub show_help: bool,
     pub show_about: bool,
+
     pub show_create_popup: bool,
     pub new_entity_input: String,
     pub create_error_message: Option<String>,
 
     pub show_delete_popup: bool,
+    pub delete_options: Vec<(DeleteScope, &'static str, bool)>,
+    pub delete_selected_index: usize,
     pub delete_error_message: Option<String>,
 
     pub show_rename_popup: bool,
     pub rename_input: String,
+    pub rename_warning: Option<String>,
     pub rename_error_message: Option<String>,
 
     pub error_message: Option<String>,
@@ -78,6 +90,108 @@ impl App {
         }
     }
 
+    pub fn open_delete_popup(&mut self) {
+        if let Some(name) = self.get_selected_entity_name() {
+            let has_local = self.git_data.local_branches.iter().any(|b| b.name == name);
+            let has_remote = self.git_data.remote_branches.iter().any(|b| b == &name);
+
+            self.delete_options = match self.branch_tab {
+                BranchTab::Local | BranchTab::Remote => vec![
+                    (DeleteScope::Both, "Delete Both (Local & Remote)", has_local && has_remote),
+                    (DeleteScope::LocalOnly, "Delete Local Branch Only", has_local),
+                    (DeleteScope::RemoteOnly, "Delete Remote Branch Only", has_remote),
+                    (DeleteScope::Cancel, "Cancel", true),
+                ],
+                BranchTab::Tags => vec![
+                    (DeleteScope::LocalOnly, "Delete Local Tag", true),
+                    (DeleteScope::Cancel, "Cancel", true),
+                ],
+            };
+
+            self.delete_selected_index = self
+                .delete_options
+                .iter()
+                .position(|(_, _, enabled)| *enabled)
+                .unwrap_or(3);
+
+            self.delete_error_message = None;
+            self.show_delete_popup = true;
+        }
+    }
+
+    pub fn confirm_delete_selected_entity(&mut self) {
+        if let Some(name) = self.get_selected_entity_name() {
+            if self.delete_options.is_empty() {
+                return;
+            }
+
+            let (scope, _, enabled) = self.delete_options[self.delete_selected_index];
+            if !enabled {
+                return;
+            }
+
+            self.show_delete_popup = false;
+
+            let result = match scope {
+                DeleteScope::LocalOnly => GitData::delete_entity(GitTarget::LocalBranch, &name),
+                DeleteScope::RemoteOnly => GitData::delete_entity(GitTarget::RemoteBranch, &name),
+                DeleteScope::Both => {
+                    let _ = GitData::delete_entity(GitTarget::LocalBranch, &name);
+                    GitData::delete_entity(GitTarget::RemoteBranch, &name)
+                }
+                DeleteScope::Cancel => Ok(()),
+            };
+
+            if let Err(err) = result {
+                self.error_message = Some(err);
+            } else {
+                self.selected_branch_index = 0;
+                self.refresh_git();
+            }
+        }
+    }
+
+    pub fn open_rename_popup(&mut self) {
+        if self.branch_tab == BranchTab::Remote {
+            self.error_message = Some(
+                "Renaming remote branches directly is not supported by Git. Create a new remote branch and delete the old one instead.".into(),
+            );
+            return;
+        }
+
+        if let Some(name) = self.get_selected_entity_name() {
+            self.rename_input = name.clone();
+
+            let has_remote = self.git_data.remote_branches.iter().any(|b| b == &name);
+            if has_remote {
+                self.rename_warning = Some(
+                    "Renaming only affects your local branch. Remote branch will not be changed.".into(),
+                );
+            } else {
+                self.rename_warning = None;
+            }
+
+            self.rename_error_message = None;
+            self.show_rename_popup = true;
+        }
+    }
+
+    pub fn submit_rename_selected_entity(&mut self) {
+        if let Some(old_name) = self.get_selected_entity_name() {
+            let target: GitTarget = self.branch_tab.into();
+            match GitData::rename_entity(target, &old_name, &self.rename_input) {
+                Ok(()) => {
+                    self.show_rename_popup = false;
+                    self.rename_input.clear();
+                    self.refresh_git();
+                }
+                Err(err) => {
+                    self.rename_error_message = Some(err);
+                }
+            }
+        }
+    }
+
     pub fn get_selected_entity_name(&self) -> Option<String> {
         match self.branch_tab {
             BranchTab::Local => self
@@ -109,39 +223,14 @@ impl App {
         }
     }
 
-    pub fn confirm_delete_selected_entity(&mut self) {
-        if let Some(name) = self.get_selected_entity_name() {
-            let target: GitTarget = self.branch_tab.into();
-            match GitData::delete_entity(target, &name) {
-                Ok(()) => {
-                    self.show_delete_popup = false;
-                    self.selected_branch_index = 0;
-                    self.refresh_git();
-                }
-                Err(err) => {
-                    self.delete_error_message = Some(err);
-                }
-            }
-        }
-    }
-
-    pub fn submit_rename_selected_entity(&mut self) {
-        if let Some(old_name) = self.get_selected_entity_name() {
-            let target: GitTarget = self.branch_tab.into();
-            match GitData::rename_entity(target, &old_name, &self.rename_input) {
-                Ok(()) => {
-                    self.show_rename_popup = false;
-                    self.rename_input.clear();
-                    self.refresh_git();
-                }
-                Err(err) => {
-                    self.rename_error_message = Some(err);
-                }
-            }
-        }
-    }
-
     pub fn handle_key_event(&mut self, key: KeyEvent) {
+        if self.error_message.is_some() {
+            if matches!(key.code, KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q')) {
+                self.error_message = None;
+            }
+            return;
+        }
+
         if self.show_help || self.show_about {
             match key.code {
                 KeyCode::Esc | KeyCode::Char('q') => {
@@ -195,17 +284,21 @@ impl App {
 
         if self.show_delete_popup {
             match key.code {
-                KeyCode::Enter | KeyCode::Char('y') => self.confirm_delete_selected_entity(),
-                KeyCode::Esc | KeyCode::Char('n') => self.show_delete_popup = false,
-                _ => {}
-            }
-            return;
-        }
-        
-        if self.error_message.is_some() {
-            match key.code {
-                KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q') => {
-                    self.error_message = None;
+                KeyCode::Up | KeyCode::Char('k') => {
+                    if self.delete_selected_index > 0 {
+                        self.delete_selected_index -= 1;
+                    }
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    if self.delete_selected_index + 1 < self.delete_options.len() {
+                        self.delete_selected_index += 1;
+                    }
+                }
+                KeyCode::Enter | KeyCode::Char('y') => {
+                    self.confirm_delete_selected_entity();
+                }
+                KeyCode::Esc | KeyCode::Char('n') => {
+                    self.show_delete_popup = false;
                 }
                 _ => {}
             }
@@ -245,15 +338,10 @@ impl App {
                 self.checkout_selected_entity();
             }
             KeyCode::Char('d') if self.active_block == ActiveBlock::Branches => {
-                self.show_delete_popup = true;
-                self.delete_error_message = None;
+                self.open_delete_popup();
             }
             KeyCode::Char('r') if self.active_block == ActiveBlock::Branches => {
-                if let Some(name) = self.get_selected_entity_name() {
-                    self.rename_input = name;
-                    self.show_rename_popup = true;
-                    self.rename_error_message = None;
-                }
+                self.open_rename_popup();
             }
 
             KeyCode::Char('?') => {
@@ -268,7 +356,6 @@ impl App {
             _ => {}
         }
     }
-
 
     fn move_selection_down(&mut self) {
         match self.active_block {
