@@ -1,5 +1,5 @@
-use std::process::Command;
 use rayon::prelude::*;
+use std::process::Command;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BranchInfo {
@@ -41,10 +41,24 @@ pub enum GitTarget {
 
 impl GitData {
     pub fn fetch_branches() -> Self {
+        let _ = Self::fetch_remotes();
         Self {
             local_branches: Self::fetch_local_branches(),
             remote_branches: Self::get_output(&["branch", "-r", "--format=%(refname:short)"]),
             tags: Self::get_output(&["tag", "-l"]),
+        }
+    }
+
+    pub fn fetch_remotes() -> Result<(), String> {
+        let output = std::process::Command::new("git")
+            .args(["fetch", "--prune"])
+            .output()
+            .map_err(|e| e.to_string())?;
+
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(String::from_utf8_lossy(&output.stderr).to_string())
         }
     }
 
@@ -89,9 +103,22 @@ impl GitData {
     }
 
     fn get_branch_counts(branch: &str) -> (usize, usize) {
-        let range = format!("{}...{}@{{upstream}}", branch, branch);
+        let upstream_range = format!("{}...{}@{{upstream}}", branch, branch);
+        if let Some(counts) = Self::query_rev_list(&upstream_range) {
+            return counts;
+        }
+
+        let fallback_range = format!("{}...origin/{}", branch, branch);
+        if let Some(counts) = Self::query_rev_list(&fallback_range) {
+            return counts;
+        }
+
+        (0, 0)
+    }
+
+    fn query_rev_list(range: &str) -> Option<(usize, usize)> {
         let output = Command::new("git")
-            .args(["rev-list", "--left-right", "--count", &range])
+            .args(["rev-list", "--left-right", "--count", range])
             .output();
 
         if let Ok(out) = output {
@@ -101,12 +128,12 @@ impl GitData {
                 if parts.len() == 2 {
                     let ahead = parts[0].parse::<usize>().unwrap_or(0);
                     let behind = parts[1].parse::<usize>().unwrap_or(0);
-                    return (ahead, behind);
+                    return Some((ahead, behind));
                 }
             }
         }
 
-        (0, 0)
+        None
     }
 
     fn get_output(args: &[&str]) -> Vec<String> {
@@ -183,18 +210,15 @@ impl GitData {
         }
 
         match target {
-            GitTarget::LocalBranch => {
-                Self::run_command(&["branch", "-m", old_name, new_name])
-            }
+            GitTarget::LocalBranch => Self::run_command(&["branch", "-m", old_name, new_name]),
             GitTarget::Tag => {
                 Self::run_command(&["tag", new_name, old_name])?;
                 Self::run_command(&["tag", "-d", old_name])
             }
             GitTarget::RemoteBranch => {
-                let (remote, old_remote_branch) = old_name
-                    .split_once('/')
-                    .unwrap_or(("origin", old_name));
-                
+                let (remote, old_remote_branch) =
+                    old_name.split_once('/').unwrap_or(("origin", old_name));
+
                 let refspec = format!("{}:refs/heads/{}", old_name, new_name);
                 Self::run_command(&["push", remote, &refspec])?;
                 Self::run_command(&["push", remote, "--delete", old_remote_branch])
@@ -213,6 +237,31 @@ impl GitData {
                 }
             }
             Err(err) => Err(format!("Failed to execute git command: {}", err)),
+        }
+    }
+    pub fn pull_branch(branch: &str) -> Result<(), String> {
+        let output = std::process::Command::new("git")
+            .args(["pull", "origin", branch])
+            .output()
+            .map_err(|e| e.to_string())?;
+
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(String::from_utf8_lossy(&output.stderr).to_string())
+        }
+    }
+
+    pub fn push_branch(branch: &str) -> Result<(), String> {
+        let output = std::process::Command::new("git")
+            .args(["push", "origin", branch])
+            .output()
+            .map_err(|e| e.to_string())?;
+
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(String::from_utf8_lossy(&output.stderr).to_string())
         }
     }
 }

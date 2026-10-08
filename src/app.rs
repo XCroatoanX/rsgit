@@ -1,6 +1,8 @@
 use crate::git::{GitData, GitTarget};
 use crate::ui::main_page::{ActiveBlock, BranchTab};
 use crossterm::event::{KeyCode, KeyEvent};
+use std::sync::mpsc::{Receiver, Sender, channel};
+use std::thread;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum DeleteScope {
@@ -8,6 +10,26 @@ pub enum DeleteScope {
     RemoteOnly,
     Both,
     Cancel,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum SyncAction {
+    Pull,
+    Push,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActiveSync {
+    pub branch_name: String,
+    pub action: SyncAction,
+}
+
+pub enum GitWorkerResult {
+    SyncCompleted {
+        branch: String,
+        action: SyncAction,
+        result: Result<(), String>,
+    },
 }
 
 #[derive(Debug, Default)]
@@ -40,27 +62,115 @@ pub struct App {
     pub rename_error_message: Option<String>,
 
     pub error_message: Option<String>,
+
+    pub active_sync: Option<ActiveSync>,
+    pub sync_tx: Option<Sender<GitWorkerResult>>,
+    pub sync_rx: Option<Receiver<GitWorkerResult>>,
 }
 
 impl App {
     pub fn new() -> Self {
+        let (tx, rx) = channel();
         Self {
             active_block: ActiveBlock::Files,
             branch_tab: BranchTab::Local,
             git_data: GitData::fetch_branches(),
+            sync_tx: Some(tx),
+            sync_rx: Some(rx),
             ..Default::default()
         }
     }
 
     pub fn tick(&mut self) {
         self.tick_count += 1;
+
+        let mut messages = Vec::new();
+        if let Some(rx) = &self.sync_rx {
+            while let Ok(msg) = rx.try_recv() {
+                messages.push(msg);
+            }
+        }
+
+        for msg in messages {
+            match msg {
+                GitWorkerResult::SyncCompleted {
+                    branch,
+                    action,
+                    result,
+                } => {
+                    self.active_sync = None;
+                    if let Err(err) = result {
+                        self.error_message =
+                            Some(format!("{:?} failed for '{}': {}", action, branch, err));
+                    }
+                    self.refresh_git();
+                }
+            }
+        }
+
         if self.tick_count >= 8 {
             self.tick_count = 0;
-            self.refresh_git();
+            if self.active_sync.is_none() {
+                self.refresh_git();
+            }
+        }
+    }
+
+    pub fn pull_selected_branch(&mut self) {
+        if self.active_sync.is_some() {
+            return;
+        }
+
+        if let Some(name) = self.get_selected_entity_name() {
+            self.active_sync = Some(ActiveSync {
+                branch_name: name.clone(),
+                action: SyncAction::Pull,
+            });
+
+            if let Some(tx) = self.sync_tx.clone() {
+                let branch = name.clone();
+                thread::spawn(move || {
+                    let res = GitData::pull_branch(&branch);
+                    let _ = tx.send(GitWorkerResult::SyncCompleted {
+                        branch,
+                        action: SyncAction::Pull,
+                        result: res,
+                    });
+                });
+            }
+        }
+    }
+
+    pub fn push_selected_branch(&mut self) {
+        if self.active_sync.is_some() {
+            return;
+        }
+
+        if let Some(name) = self.get_selected_entity_name() {
+            self.active_sync = Some(ActiveSync {
+                branch_name: name.clone(),
+                action: SyncAction::Push,
+            });
+
+            if let Some(tx) = self.sync_tx.clone() {
+                let branch = name.clone();
+                thread::spawn(move || {
+                    let res = GitData::push_branch(&branch);
+                    let _ = tx.send(GitWorkerResult::SyncCompleted {
+                        branch,
+                        action: SyncAction::Push,
+                        result: res,
+                    });
+                });
+            }
         }
     }
 
     pub fn refresh_git(&mut self) {
+        let _ = std::process::Command::new("git")
+            .args(["fetch", "--prune"])
+            .output();
+
         self.git_data = GitData::fetch_branches();
     }
 
@@ -93,13 +203,46 @@ impl App {
     pub fn open_delete_popup(&mut self) {
         if let Some(name) = self.get_selected_entity_name() {
             let has_local = self.git_data.local_branches.iter().any(|b| b.name == name);
-            let has_remote = self.git_data.remote_branches.iter().any(|b| b == &name);
+            let has_remote = self.git_data.remote_branches.iter().any(|b| {
+                let branch_name = b.split_once('/').map(|(_, rest)| rest).unwrap_or(b);
+                branch_name == name || b == &name
+            });
 
             self.delete_options = match self.branch_tab {
-                BranchTab::Local | BranchTab::Remote => vec![
-                    (DeleteScope::Both, "Delete Both (Local & Remote)", has_local && has_remote),
-                    (DeleteScope::LocalOnly, "Delete Local Branch Only", has_local),
-                    (DeleteScope::RemoteOnly, "Delete Remote Branch Only", has_remote),
+                BranchTab::Local => vec![
+                    (
+                        DeleteScope::LocalOnly,
+                        "Delete Local Branch Only",
+                        has_local,
+                    ),
+                    (
+                        DeleteScope::Both,
+                        "Delete Both (Local & Remote)",
+                        has_local && has_remote,
+                    ),
+                    (
+                        DeleteScope::RemoteOnly,
+                        "Delete Remote Branch Only",
+                        has_remote,
+                    ),
+                    (DeleteScope::Cancel, "Cancel", true),
+                ],
+                BranchTab::Remote => vec![
+                    (
+                        DeleteScope::RemoteOnly,
+                        "Delete Remote Branch Only",
+                        has_remote,
+                    ),
+                    (
+                        DeleteScope::Both,
+                        "Delete Both (Local & Remote)",
+                        has_local && has_remote,
+                    ),
+                    (
+                        DeleteScope::LocalOnly,
+                        "Delete Local Branch Only",
+                        has_local,
+                    ),
                     (DeleteScope::Cancel, "Cancel", true),
                 ],
                 BranchTab::Tags => vec![
@@ -136,8 +279,10 @@ impl App {
                 DeleteScope::LocalOnly => GitData::delete_entity(GitTarget::LocalBranch, &name),
                 DeleteScope::RemoteOnly => GitData::delete_entity(GitTarget::RemoteBranch, &name),
                 DeleteScope::Both => {
-                    let _ = GitData::delete_entity(GitTarget::LocalBranch, &name);
-                    GitData::delete_entity(GitTarget::RemoteBranch, &name)
+                    let local_res = GitData::delete_entity(GitTarget::LocalBranch, &name);
+                    let remote_res = GitData::delete_entity(GitTarget::RemoteBranch, &name);
+
+                    local_res.and(remote_res)
                 }
                 DeleteScope::Cancel => Ok(()),
             };
@@ -162,10 +307,15 @@ impl App {
         if let Some(name) = self.get_selected_entity_name() {
             self.rename_input = name.clone();
 
-            let has_remote = self.git_data.remote_branches.iter().any(|b| b == &name);
+            let has_remote = self.git_data.remote_branches.iter().any(|b| {
+                let branch_name = b.split_once('/').map(|(_, rest)| rest).unwrap_or(b);
+                branch_name == name || b == &name
+            });
+
             if has_remote {
                 self.rename_warning = Some(
-                    "Renaming only affects your local branch. Remote branch will not be changed.".into(),
+                    "Renaming only affects your local branch. Remote branch will not be changed."
+                        .into(),
                 );
             } else {
                 self.rename_warning = None;
@@ -204,20 +354,22 @@ impl App {
                 .remote_branches
                 .get(self.selected_branch_index)
                 .cloned(),
-            BranchTab::Tags => self
-                .git_data
-                .tags
-                .get(self.selected_branch_index)
-                .cloned(),
+            BranchTab::Tags => self.git_data.tags.get(self.selected_branch_index).cloned(),
         }
     }
 
     pub fn checkout_selected_entity(&mut self) {
         if let Some(name) = self.get_selected_entity_name() {
             let target: GitTarget = self.branch_tab.into();
+
             if let Err(err) = GitData::checkout_entity(target, &name) {
                 self.error_message = Some(err);
             } else {
+                if self.branch_tab == BranchTab::Remote {
+                    self.branch_tab = BranchTab::Local;
+                    self.selected_branch_index = 0;
+                }
+
                 self.refresh_git();
             }
         }
@@ -281,25 +433,30 @@ impl App {
             }
             return;
         }
-
         if self.show_delete_popup {
             match key.code {
                 KeyCode::Up | KeyCode::Char('k') => {
-                    if self.delete_selected_index > 0 {
-                        self.delete_selected_index -= 1;
+                    let mut next = self.delete_selected_index;
+                    while next > 0 {
+                        next -= 1;
+                        if self.delete_options[next].2 {
+                            self.delete_selected_index = next;
+                            break;
+                        }
                     }
                 }
                 KeyCode::Down | KeyCode::Char('j') => {
-                    if self.delete_selected_index + 1 < self.delete_options.len() {
-                        self.delete_selected_index += 1;
+                    let mut next = self.delete_selected_index;
+                    while next + 1 < self.delete_options.len() {
+                        next += 1;
+                        if self.delete_options[next].2 {
+                            self.delete_selected_index = next;
+                            break;
+                        }
                     }
                 }
-                KeyCode::Enter | KeyCode::Char('y') => {
-                    self.confirm_delete_selected_entity();
-                }
-                KeyCode::Esc | KeyCode::Char('n') => {
-                    self.show_delete_popup = false;
-                }
+                KeyCode::Enter | KeyCode::Char('y') => self.confirm_delete_selected_entity(),
+                KeyCode::Esc | KeyCode::Char('n') => self.show_delete_popup = false,
                 _ => {}
             }
             return;
@@ -309,7 +466,9 @@ impl App {
             KeyCode::Esc | KeyCode::Char('q') => self.should_quit = true,
 
             KeyCode::Tab | KeyCode::Char('h') => self.active_block = self.active_block.next(),
-            KeyCode::BackTab | KeyCode::Char('l') => self.active_block = self.active_block.previous(),
+            KeyCode::BackTab | KeyCode::Char('l') => {
+                self.active_block = self.active_block.previous()
+            }
 
             KeyCode::Down | KeyCode::Char('j') => self.move_selection_down(),
             KeyCode::Up | KeyCode::Char('k') => self.move_selection_up(),
@@ -351,6 +510,13 @@ impl App {
             KeyCode::Char('a') => {
                 self.show_help = false;
                 self.show_about = !self.show_about;
+            }
+
+            KeyCode::Char('p') if self.active_block == ActiveBlock::Branches => {
+                self.pull_selected_branch();
+            }
+            KeyCode::Char('P') if self.active_block == ActiveBlock::Branches => {
+                self.push_selected_branch();
             }
 
             _ => {}

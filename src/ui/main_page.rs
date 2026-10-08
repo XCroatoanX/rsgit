@@ -1,3 +1,5 @@
+use ratatui::style::Modifier;
+use ratatui::text::Span;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Layout, Rect},
@@ -5,15 +7,12 @@ use ratatui::{
     text::Line,
     widgets::{Block, BorderType, Borders, Widget},
 };
-use ratatui::style::Modifier;
-use ratatui::text::Span;
 use strum::{EnumCount, EnumIter, IntoEnumIterator};
 
 use crate::app::App;
 use crate::ui::components::*;
-use crate::ui::popups::{render_about_popup, render_help_popup};
-use crate::ui::popups::confirm::ConfirmPopup;
 use crate::ui::popups::textinput::TextInputPopup;
+use crate::ui::popups::{render_about_popup, render_help_popup};
 
 use crate::ui::popups::error::ErrorPopup;
 use crate::ui::popups::selection::{SelectionOption, SelectionPopup};
@@ -21,9 +20,11 @@ use crate::ui::popups::selection::{SelectionOption, SelectionPopup};
 pub fn create_block(app: &App, block_type: ActiveBlock) -> Block<'static> {
     let title = match block_type {
         ActiveBlock::Branches => {
-            let mut spans = vec![
-                Span::raw(format!("[{}] {} ", block_type.index(), block_type.title())),
-            ];
+            let mut spans = vec![Span::raw(format!(
+                "[{}] {} ",
+                block_type.index(),
+                block_type.title()
+            ))];
 
             for tab in BranchTab::iter() {
                 let style = if app.branch_tab == tab {
@@ -153,7 +154,7 @@ impl<'a> Widget for DashboardApp<'a> {
             Constraint::Fill(1),
             Constraint::Fill(1),
         ])
-            .areas(left_col);
+        .areas(left_col);
 
         let [right_1, right_2] =
             Layout::vertical([Constraint::Percentage(60), Constraint::Percentage(40)])
@@ -172,28 +173,42 @@ impl<'a> Widget for DashboardApp<'a> {
         }
 
         if self.app.show_delete_popup {
-            if let Some(name) = self.app.get_selected_entity_name() {
-                let title = match self.app.branch_tab {
-                    BranchTab::Local => "Delete Local Branch",
-                    BranchTab::Remote => "Delete Remote Branch",
-                    BranchTab::Tags => "Delete Tag",
-                };
-                let message = format!("Are you sure you want to delete '{}'?", name);
+            let options: Vec<SelectionOption> = self
+                .app
+                .delete_options
+                .iter()
+                .map(|(_, label, enabled)| SelectionOption {
+                    label,
+                    enabled: *enabled,
+                })
+                .collect();
 
-                ConfirmPopup {
-                    title,
-                    message: &message,
-                    error: self.app.delete_error_message.as_deref(),
-                }
-                    .render(area, buf);
+            let title = match self.app.branch_tab {
+                BranchTab::Local => "Delete Local Branch",
+                BranchTab::Remote => "Delete Remote Branch",
+                BranchTab::Tags => "Delete Tag",
+            };
+
+            SelectionPopup {
+                title,
+                options: &options,
+                selected_index: self.app.delete_selected_index,
+                warning: None,
             }
+            .render(area, buf);
             return;
         }
 
         if self.app.show_create_popup {
             let (title, label) = match self.app.branch_tab {
-                BranchTab::Local => ("Create Local Branch", "Enter branch name (spaces convert to '-'):"),
-                BranchTab::Remote => ("Create Remote Branch", "Enter remote branch name (spaces convert to '-'):"),
+                BranchTab::Local => (
+                    "Create Local Branch",
+                    "Enter branch name (spaces convert to '-'):",
+                ),
+                BranchTab::Remote => (
+                    "Create Remote Branch",
+                    "Enter remote branch name (spaces convert to '-'):",
+                ),
                 BranchTab::Tags => ("Create Tag", "Enter tag name (spaces convert to '-'):"),
             };
 
@@ -203,7 +218,7 @@ impl<'a> Widget for DashboardApp<'a> {
                 input: &self.app.new_entity_input,
                 error: self.app.create_error_message.as_deref(),
             }
-                .render(area, buf);
+            .render(area, buf);
             return;
         }
 
@@ -220,7 +235,7 @@ impl<'a> Widget for DashboardApp<'a> {
                 input: &self.app.rename_input,
                 error: self.app.rename_error_message.as_deref(),
             }
-                .render(area, buf);
+            .render(area, buf);
             return;
         }
 
@@ -251,7 +266,7 @@ impl<'a> Widget for DashboardApp<'a> {
                 selected_index: self.app.delete_selected_index,
                 warning: None,
             }
-                .render(area, buf);
+            .render(area, buf);
             return;
         }
 
@@ -262,7 +277,7 @@ impl<'a> Widget for DashboardApp<'a> {
                 input: &self.app.rename_input,
                 error: self.app.rename_warning.as_deref(),
             }
-                .render(area, buf);
+            .render(area, buf);
             return;
         }
     }
