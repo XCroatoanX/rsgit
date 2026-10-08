@@ -24,6 +24,7 @@ pub struct ActiveSync {
 }
 
 pub enum GitWorkerResult {
+    RefreshCompleted(GitData),
     SyncCompleted {
         branch: String,
         action: SyncAction,
@@ -63,6 +64,7 @@ pub struct App {
     pub error_message: Option<String>,
 
     pub active_sync: Option<ActiveSync>,
+    pub refresh_in_progress: bool,
     pub sync_tx: Option<Sender<GitWorkerResult>>,
     pub sync_rx: Option<Receiver<GitWorkerResult>>,
 }
@@ -70,14 +72,16 @@ pub struct App {
 impl App {
     pub fn new() -> Self {
         let (tx, rx) = channel();
-        Self {
+        let mut app = Self {
             active_block: ActiveBlock::Files,
             branch_tab: BranchTab::Local,
-            git_data: GitData::fetch_branches(),
+            git_data: GitData::default(),
             sync_tx: Some(tx),
             sync_rx: Some(rx),
             ..Default::default()
-        }
+        };
+        app.refresh_git();
+        app
     }
 
     pub fn tick(&mut self) {
@@ -92,6 +96,10 @@ impl App {
 
         for msg in messages {
             match msg {
+                GitWorkerResult::RefreshCompleted(git_data) => {
+                    self.git_data = git_data;
+                    self.refresh_in_progress = false;
+                }
                 GitWorkerResult::SyncCompleted {
                     branch,
                     action,
@@ -166,11 +174,19 @@ impl App {
     }
 
     pub fn refresh_git(&mut self) {
-        let _ = std::process::Command::new("git")
-            .args(["fetch", "--prune"])
-            .output();
+        if self.refresh_in_progress {
+            return;
+        }
 
-        self.git_data = GitData::fetch_branches();
+        let Some(tx) = self.sync_tx.clone() else {
+            return;
+        };
+
+        self.refresh_in_progress = true;
+        thread::spawn(move || {
+            let git_data = GitData::fetch_branches();
+            let _ = tx.send(GitWorkerResult::RefreshCompleted(git_data));
+        });
     }
 
     pub fn get_selected_entity_name(&self) -> Option<String> {
