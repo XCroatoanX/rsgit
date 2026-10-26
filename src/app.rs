@@ -83,6 +83,8 @@ pub struct App {
     pub show_merge_popup: bool,
     pub merge_options: Vec<(MergeStrategy, &'static str, bool)>,
     pub merge_selected_index: usize,
+    pub merge_source: String,
+    pub merge_target: String,
 }
 
 impl App {
@@ -340,16 +342,7 @@ impl App {
     }
 
     pub fn rebase_selected_branch(&mut self) {
-        if let Some(name) = self.get_selected_entity_name() {
-            let branch_name = if self.branch_tab == BranchTab::Remote {
-                name.split_once('/')
-                    .map(|(_, r)| r)
-                    .unwrap_or(&name)
-                    .to_string()
-            } else {
-                name
-            };
-
+        if let Some(branch_name) = self.get_selected_entity_name() {
             if let Err(err) = GitData::rebase_branch(&branch_name) {
                 self.error_message = Some(format!("Rebase failed: {}", err));
             } else {
@@ -359,75 +352,101 @@ impl App {
     }
 
     pub fn open_merge_popup(&mut self) {
-        if let Some(name) = self.get_selected_entity_name() {
-            let branch_name = if self.branch_tab == BranchTab::Remote {
-                name.split_once('/')
-                    .map(|(_, r)| r)
-                    .unwrap_or(&name)
-                    .to_string()
-            } else {
-                name
-            };
+        let Some(target) = self.get_selected_entity_name() else {
+            return;
+        };
 
-            let ff_available = crate::git::branches::can_fast_forward(&branch_name);
+        let source = match GitData::current_branch() {
+            Ok(source) => source,
+            Err(err) => {
+                self.error_message = Some(err);
+                return;
+            }
+        };
 
-            self.merge_options = vec![
-                (
-                    MergeStrategy::FastForward,
-                    "Fast-forward only (--ff-only)",
-                    ff_available,
-                ),
-                (
-                    MergeStrategy::MergeCommit,
-                    "Create merge commit (--no-ff)",
-                    true,
-                ),
-                (
-                    MergeStrategy::SquashUncommitted,
-                    "Squash merge (Uncommitted)",
-                    true,
-                ),
-                (MergeStrategy::SquashCommit, "Squash merge & Commit", true),
-                (MergeStrategy::Cancel, "Cancel", true),
-            ];
+        let ff_available = if self.branch_tab == BranchTab::Local {
+            if source == target {
+                self.error_message = Some(format!("'{}' is already checked out.", target));
+                return;
+            }
+            if GitData::is_ancestor(&source, &target) {
+                self.error_message = Some(format!(
+                    "Nothing to merge: '{}' already contains '{}'.",
+                    target, source
+                ));
+                return;
+            }
+            // Local branches are merge destinations: HEAD gets merged into them.
+            GitData::can_fast_forward_into(&target)
+        } else {
+            // A remote/tag cannot receive a merge, so it is merged into HEAD.
+            GitData::can_fast_forward_from(&target)
+        };
 
-            self.merge_selected_index = self
-                .merge_options
-                .iter()
-                .position(|(_, _, enabled)| *enabled)
-                .unwrap_or(4);
+        self.merge_options = vec![
+            (
+                MergeStrategy::FastForward,
+                "Fast-forward only (--ff-only)",
+                ff_available,
+            ),
+            (
+                MergeStrategy::MergeCommit,
+                "Create merge commit (--no-ff)",
+                true,
+            ),
+            (
+                MergeStrategy::SquashUncommitted,
+                "Squash merge (Uncommitted)",
+                true,
+            ),
+            (MergeStrategy::SquashCommit, "Squash merge & Commit", true),
+            (MergeStrategy::Cancel, "Cancel", true),
+        ];
 
-            self.show_merge_popup = true;
+        self.merge_selected_index = self
+            .merge_options
+            .iter()
+            .position(|(_, _, enabled)| *enabled)
+            .unwrap_or(4);
+
+        self.merge_source = source;
+        self.merge_target = target;
+        self.show_merge_popup = true;
+    }
+
+    pub fn merge_popup_title(&self) -> String {
+        if self.branch_tab == BranchTab::Local {
+            format!("Merge '{}' into '{}'", self.merge_source, self.merge_target)
+        } else {
+            format!("Merge '{}' into '{}'", self.merge_target, self.merge_source)
         }
     }
 
     pub fn confirm_merge_selected_entity(&mut self) {
-        if let Some(name) = self.get_selected_entity_name() {
-            if self.merge_options.is_empty() {
-                return;
-            }
+        if self.merge_options.is_empty() {
+            return;
+        }
 
-            let (strategy, _, enabled) = self.merge_options[self.merge_selected_index];
-            if !enabled {
-                return;
-            }
+        let (strategy, _, enabled) = self.merge_options[self.merge_selected_index];
+        if !enabled {
+            return;
+        }
 
-            self.show_merge_popup = false;
+        self.show_merge_popup = false;
 
-            let branch_name = if self.branch_tab == BranchTab::Remote {
-                name.split_once('/')
-                    .map(|(_, r)| r)
-                    .unwrap_or(&name)
-                    .to_string()
-            } else {
-                name
-            };
+        let source = std::mem::take(&mut self.merge_source);
+        let target = std::mem::take(&mut self.merge_target);
 
-            if let Err(err) = GitData::merge_with_strategy(&branch_name, strategy) {
-                self.error_message = Some(format!("Merge failed: {}", err));
-            } else {
-                self.refresh_git();
-            }
+        let result = if self.branch_tab == BranchTab::Local {
+            GitData::merge_into(&target, &source, strategy)
+        } else {
+            GitData::merge_with_strategy(&target, strategy)
+        };
+
+        if let Err(err) = result {
+            self.error_message = Some(format!("Merge failed: {}", err));
+        } else {
+            self.refresh_git();
         }
     }
 }

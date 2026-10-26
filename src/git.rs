@@ -65,6 +65,26 @@ impl GitData {
         branches::rebase_branch(branch)
     }
 
+    pub fn current_branch() -> Result<String, String> {
+        branches::current_branch()
+    }
+
+    pub fn can_fast_forward_from(branch: &str) -> bool {
+        branches::can_fast_forward_from(branch)
+    }
+
+    pub fn can_fast_forward_into(branch: &str) -> bool {
+        branches::can_fast_forward_into(branch)
+    }
+
+    pub fn is_ancestor(ancestor: &str, descendant: &str) -> bool {
+        branches::is_ancestor(ancestor, descendant)
+    }
+
+    pub fn merge_into(target: &str, source: &str, strategy: MergeStrategy) -> Result<(), String> {
+        branches::merge_into(target, source, strategy)
+    }
+
     pub fn merge_with_strategy(branch: &str, strategy: MergeStrategy) -> Result<(), String> {
         branches::merge_with_strategy(branch, strategy)
     }

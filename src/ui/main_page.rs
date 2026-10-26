@@ -295,8 +295,9 @@ impl<'a> Widget for DashboardApp<'a> {
                 })
                 .collect();
 
+            let title = self.app.merge_popup_title();
             SelectionPopup {
-                title: "Merge Strategy",
+                title: &title,
                 options: &options,
                 selected_index: self.app.merge_selected_index,
                 warning: None,
