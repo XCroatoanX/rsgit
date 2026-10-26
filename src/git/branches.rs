@@ -1,5 +1,6 @@
 use super::commands::{get_output, run_command};
 use super::types::{BranchInfo, GitTarget};
+use crate::app::MergeStrategy;
 use rayon::prelude::*;
 use std::process::Command;
 
@@ -29,7 +30,7 @@ pub fn fetch_local_branches() -> Vec<BranchInfo> {
         })
         .collect();
 
-   let mut branches: Vec<BranchInfo> = raw_branches
+    let mut branches: Vec<BranchInfo> = raw_branches
         .into_par_iter()
         .map(|(is_head, name)| {
             let (ahead, behind) = get_branch_counts(&name);
@@ -164,4 +165,38 @@ fn query_rev_list(range: &str) -> Option<(usize, usize)> {
     }
 
     None
+}
+
+pub fn rebase_branch(branch: &str) -> Result<(), String> {
+    let branch = branch.trim();
+    if branch.is_empty() {
+        return Err("Branch name cannot be empty".to_string());
+    }
+    run_command(&["rebase", branch])
+}
+
+pub fn can_fast_forward(branch: &str) -> bool {
+    let output = Command::new("git")
+        .args(["merge-base", "--is-ancestor", "HEAD", branch])
+        .output();
+    matches!(output, Ok(out) if out.status.success())
+}
+
+pub fn merge_with_strategy(branch: &str, strategy: MergeStrategy) -> Result<(), String> {
+    let branch = branch.trim();
+    if branch.is_empty() {
+        return Err("Branch name cannot be empty".to_string());
+    }
+
+    match strategy {
+        MergeStrategy::FastForward => run_command(&["merge", "--ff-only", branch]),
+        MergeStrategy::MergeCommit => run_command(&["merge", "--no-ff", branch]),
+        MergeStrategy::SquashUncommitted => run_command(&["merge", "--squash", branch]),
+        MergeStrategy::SquashCommit => {
+            run_command(&["merge", "--squash", branch])?;
+            let msg = format!("Merge branch '{}' (squashed)", branch);
+            run_command(&["commit", "-m", &msg])
+        }
+        MergeStrategy::Cancel => Ok(()),
+    }
 }

@@ -36,5 +36,10 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
         return;
     }
 
+    if app.show_merge_popup {
+        popups::handle_merge_keys(app, key);
+        return;
+    }
+
     navigation::handle_global_keys(app, key);
 }

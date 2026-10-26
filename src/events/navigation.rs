@@ -56,6 +56,13 @@ pub fn handle_global_keys(app: &mut App, key: KeyEvent) {
             app.push_selected_branch();
         }
 
+        KeyCode::Char('M') if app.active_block == ActiveBlock::Branches => {
+            app.open_merge_popup();
+        }
+        KeyCode::Char('R') if app.active_block == ActiveBlock::Branches => {
+            app.rebase_selected_branch();
+        }
+
         _ => {}
     }
 }

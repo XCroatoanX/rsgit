@@ -12,6 +12,15 @@ pub enum DeleteScope {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum MergeStrategy {
+    FastForward,
+    MergeCommit,
+    SquashUncommitted,
+    SquashCommit,
+    Cancel,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum SyncAction {
     Pull,
     Push,
@@ -71,6 +80,9 @@ pub struct App {
     pub refresh_in_progress: bool,
     pub sync_tx: Option<Sender<GitWorkerResult>>,
     pub sync_rx: Option<Receiver<GitWorkerResult>>,
+    pub show_merge_popup: bool,
+    pub merge_options: Vec<(MergeStrategy, &'static str, bool)>,
+    pub merge_selected_index: usize,
 }
 
 impl App {
@@ -282,11 +294,9 @@ impl App {
                     self.refresh_commit_diff();
                 }
             }
-            ActiveBlock::Diff
-                if !self.commit_diff.is_empty() => {
-                    self.selected_diff_index =
-                        (self.selected_diff_index + 1) % self.commit_diff.len();
-                }
+            ActiveBlock::Diff if !self.commit_diff.is_empty() => {
+                self.selected_diff_index = (self.selected_diff_index + 1) % self.commit_diff.len();
+            }
             _ => {}
         }
     }
@@ -314,10 +324,9 @@ impl App {
                     self.refresh_commit_diff();
                 }
             }
-            ActiveBlock::Diff
-                if !self.commit_diff.is_empty() => {
-                    self.selected_diff_index = self.selected_diff_index.saturating_sub(1);
-                }
+            ActiveBlock::Diff if !self.commit_diff.is_empty() => {
+                self.selected_diff_index = self.selected_diff_index.saturating_sub(1);
+            }
             _ => {}
         }
     }
@@ -327,6 +336,98 @@ impl App {
             BranchTab::Local => self.git_data.local_branches.len(),
             BranchTab::Remote => self.git_data.remote_branches.len(),
             BranchTab::Tags => self.git_data.tags.len(),
+        }
+    }
+
+    pub fn rebase_selected_branch(&mut self) {
+        if let Some(name) = self.get_selected_entity_name() {
+            let branch_name = if self.branch_tab == BranchTab::Remote {
+                name.split_once('/')
+                    .map(|(_, r)| r)
+                    .unwrap_or(&name)
+                    .to_string()
+            } else {
+                name
+            };
+
+            if let Err(err) = GitData::rebase_branch(&branch_name) {
+                self.error_message = Some(format!("Rebase failed: {}", err));
+            } else {
+                self.refresh_git();
+            }
+        }
+    }
+
+    pub fn open_merge_popup(&mut self) {
+        if let Some(name) = self.get_selected_entity_name() {
+            let branch_name = if self.branch_tab == BranchTab::Remote {
+                name.split_once('/')
+                    .map(|(_, r)| r)
+                    .unwrap_or(&name)
+                    .to_string()
+            } else {
+                name
+            };
+
+            let ff_available = crate::git::branches::can_fast_forward(&branch_name);
+
+            self.merge_options = vec![
+                (
+                    MergeStrategy::FastForward,
+                    "Fast-forward only (--ff-only)",
+                    ff_available,
+                ),
+                (
+                    MergeStrategy::MergeCommit,
+                    "Create merge commit (--no-ff)",
+                    true,
+                ),
+                (
+                    MergeStrategy::SquashUncommitted,
+                    "Squash merge (Uncommitted)",
+                    true,
+                ),
+                (MergeStrategy::SquashCommit, "Squash merge & Commit", true),
+                (MergeStrategy::Cancel, "Cancel", true),
+            ];
+
+            self.merge_selected_index = self
+                .merge_options
+                .iter()
+                .position(|(_, _, enabled)| *enabled)
+                .unwrap_or(4);
+
+            self.show_merge_popup = true;
+        }
+    }
+
+    pub fn confirm_merge_selected_entity(&mut self) {
+        if let Some(name) = self.get_selected_entity_name() {
+            if self.merge_options.is_empty() {
+                return;
+            }
+
+            let (strategy, _, enabled) = self.merge_options[self.merge_selected_index];
+            if !enabled {
+                return;
+            }
+
+            self.show_merge_popup = false;
+
+            let branch_name = if self.branch_tab == BranchTab::Remote {
+                name.split_once('/')
+                    .map(|(_, r)| r)
+                    .unwrap_or(&name)
+                    .to_string()
+            } else {
+                name
+            };
+
+            if let Err(err) = GitData::merge_with_strategy(&branch_name, strategy) {
+                self.error_message = Some(format!("Merge failed: {}", err));
+            } else {
+                self.refresh_git();
+            }
         }
     }
 }
