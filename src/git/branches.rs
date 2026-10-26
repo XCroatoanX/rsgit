@@ -29,7 +29,7 @@ pub fn fetch_local_branches() -> Vec<BranchInfo> {
         })
         .collect();
 
-    raw_branches
+   let mut branches: Vec<BranchInfo> = raw_branches
         .into_par_iter()
         .map(|(is_head, name)| {
             let (ahead, behind) = get_branch_counts(&name);
@@ -40,7 +40,11 @@ pub fn fetch_local_branches() -> Vec<BranchInfo> {
                 is_head,
             }
         })
-        .collect()
+        .collect();
+
+    branches.sort_by(|a, b| b.is_head.cmp(&a.is_head));
+
+    branches
 }
 
 pub fn fetch_remote_branches() -> Vec<String> {
