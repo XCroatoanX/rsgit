@@ -85,6 +85,9 @@ pub struct App {
     pub merge_selected_index: usize,
     pub merge_source: String,
     pub merge_target: String,
+    pub show_rebase_popup: bool,
+    pub rebase_source: String,
+    pub rebase_target: String,
 }
 
 impl App {
@@ -341,7 +344,7 @@ impl App {
         }
     }
 
-    pub fn rebase_selected_branch(&mut self) {
+    pub fn open_rebase_popup(&mut self) {
         let Some(target) = self.get_selected_entity_name() else {
             return;
         };
@@ -364,6 +367,21 @@ impl App {
                 "Nothing to rebase: '{}' is already based on '{}'.",
                 current, target
             ));
+            return;
+        }
+
+        self.rebase_source = current;
+        self.rebase_target = target;
+        self.show_rebase_popup = true;
+    }
+
+    pub fn confirm_rebase_selected_entity(&mut self) {
+        self.show_rebase_popup = false;
+
+        let target = std::mem::take(&mut self.rebase_target);
+        self.rebase_source.clear();
+
+        if target.is_empty() {
             return;
         }
 

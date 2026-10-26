@@ -80,3 +80,13 @@ pub fn handle_merge_keys(app: &mut App, key: KeyEvent) {
         _ => {}
     }
 }
+
+pub fn handle_rebase_keys(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Enter | KeyCode::Char('y') => app.confirm_rebase_selected_entity(),
+        KeyCode::Esc | KeyCode::Char('n') | KeyCode::Char('q') => {
+            app.show_rebase_popup = false;
+        }
+        _ => {}
+    }
+}

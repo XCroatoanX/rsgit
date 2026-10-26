@@ -14,6 +14,7 @@ use crate::ui::components::*;
 use crate::ui::popups::textinput::TextInputPopup;
 use crate::ui::popups::{render_about_popup, render_help_popup};
 
+use crate::ui::popups::confirm::ConfirmPopup;
 use crate::ui::popups::error::ErrorPopup;
 use crate::ui::popups::selection::{SelectionOption, SelectionPopup};
 
@@ -301,6 +302,21 @@ impl<'a> Widget for DashboardApp<'a> {
                 options: &options,
                 selected_index: self.app.merge_selected_index,
                 warning: None,
+            }
+            .render(area, buf);
+            return;
+        }
+
+        if self.app.show_rebase_popup {
+            let message = format!(
+                "Rebase '{}' onto '{}'?",
+                self.app.rebase_source, self.app.rebase_target
+            );
+
+            ConfirmPopup {
+                title: "Rebase",
+                message: &message,
+                error: None,
             }
             .render(area, buf);
             return;
