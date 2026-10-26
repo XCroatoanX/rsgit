@@ -283,5 +283,26 @@ impl<'a> Widget for DashboardApp<'a> {
             }
             .render(area, buf);
         }
+
+        if self.app.show_merge_popup {
+            let options: Vec<SelectionOption> = self
+                .app
+                .merge_options
+                .iter()
+                .map(|(_, label, enabled)| SelectionOption {
+                    label,
+                    enabled: *enabled,
+                })
+                .collect();
+
+            SelectionPopup {
+                title: "Merge Strategy",
+                options: &options,
+                selected_index: self.app.merge_selected_index,
+                warning: None,
+            }
+            .render(area, buf);
+            return;
+        }
     }
 }

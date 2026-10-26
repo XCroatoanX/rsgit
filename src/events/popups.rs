@@ -61,28 +61,22 @@ pub fn handle_delete_keys(app: &mut App, key: KeyEvent) {
 
 pub fn handle_merge_keys(app: &mut App, key: KeyEvent) {
     match key.code {
+        KeyCode::Esc | KeyCode::Char('q') => {
+            app.show_merge_popup = false;
+        }
         KeyCode::Up | KeyCode::Char('k') => {
-            let mut next = app.merge_selected_index;
-            while next > 0 {
-                next -= 1;
-                if app.merge_options[next].2 {
-                    app.merge_selected_index = next;
-                    break;
-                }
+            if app.merge_selected_index > 0 {
+                app.merge_selected_index -= 1;
             }
         }
         KeyCode::Down | KeyCode::Char('j') => {
-            let mut next = app.merge_selected_index;
-            while next + 1 < app.merge_options.len() {
-                next += 1;
-                if app.merge_options[next].2 {
-                    app.merge_selected_index = next;
-                    break;
-                }
+            if app.merge_selected_index + 1 < app.merge_options.len() {
+                app.merge_selected_index += 1;
             }
         }
-        KeyCode::Enter | KeyCode::Char('y') => app.confirm_merge_selected_entity(),
-        KeyCode::Esc | KeyCode::Char('n') => app.show_merge_popup = false,
+        KeyCode::Enter => {
+            app.confirm_merge_selected_entity();
+        }
         _ => {}
     }
 }
