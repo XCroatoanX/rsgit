@@ -342,12 +342,35 @@ impl App {
     }
 
     pub fn rebase_selected_branch(&mut self) {
-        if let Some(branch_name) = self.get_selected_entity_name() {
-            if let Err(err) = GitData::rebase_branch(&branch_name) {
-                self.error_message = Some(format!("Rebase failed: {}", err));
-            } else {
-                self.refresh_git();
+        let Some(target) = self.get_selected_entity_name() else {
+            return;
+        };
+
+        let current = match GitData::current_branch() {
+            Ok(current) => current,
+            Err(err) => {
+                self.error_message = Some(err);
+                return;
             }
+        };
+
+        if current == target {
+            self.error_message = Some(format!("'{}' is already checked out.", target));
+            return;
+        }
+
+        if GitData::is_ancestor(&target, &current) {
+            self.error_message = Some(format!(
+                "Nothing to rebase: '{}' is already based on '{}'.",
+                current, target
+            ));
+            return;
+        }
+
+        if let Err(err) = GitData::rebase_branch(&target) {
+            self.error_message = Some(format!("Rebase failed: {}", err));
+        } else {
+            self.refresh_git();
         }
     }
 
