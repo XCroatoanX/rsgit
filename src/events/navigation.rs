@@ -21,7 +21,7 @@ pub fn handle_global_keys(app: &mut App, key: KeyEvent) {
         }
 
         KeyCode::Char('[') if app.active_block == ActiveBlock::Branches => {
-            app.select_branch_tab(app.branch_tab.next());
+            app.select_branch_tab(app.branch_tab.previous());
         }
         KeyCode::Char(']') if app.active_block == ActiveBlock::Branches => {
             app.select_branch_tab(app.branch_tab.next());
