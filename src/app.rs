@@ -282,12 +282,11 @@ impl App {
                     self.refresh_commit_diff();
                 }
             }
-            ActiveBlock::Diff => {
-                if !self.commit_diff.is_empty() {
+            ActiveBlock::Diff
+                if !self.commit_diff.is_empty() => {
                     self.selected_diff_index =
                         (self.selected_diff_index + 1) % self.commit_diff.len();
                 }
-            }
             _ => {}
         }
     }
@@ -315,11 +314,10 @@ impl App {
                     self.refresh_commit_diff();
                 }
             }
-            ActiveBlock::Diff => {
-                if !self.commit_diff.is_empty() {
+            ActiveBlock::Diff
+                if !self.commit_diff.is_empty() => {
                     self.selected_diff_index = self.selected_diff_index.saturating_sub(1);
                 }
-            }
             _ => {}
         }
     }
