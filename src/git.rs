@@ -1,8 +1,10 @@
-mod branches;
+pub mod branches;
 mod commands;
 mod commits;
 mod sync;
 mod types;
+
+use crate::app::MergeStrategy;
 
 pub use types::{BranchInfo, CommitLine, GitTarget};
 
@@ -21,10 +23,6 @@ impl GitData {
             remote_branches: branches::fetch_remote_branches(),
             tags: branches::fetch_tags(),
         }
-    }
-
-    pub fn fetch_remotes() -> Result<(), String> {
-        sync::fetch_remotes()
     }
 
     pub fn fetch_history(target: &str) -> Vec<CommitLine> {
@@ -61,5 +59,33 @@ impl GitData {
 
     pub fn push_branch(branch: &str) -> Result<(), String> {
         sync::push_branch(branch)
+    }
+
+    pub fn rebase_branch(branch: &str) -> Result<(), String> {
+        branches::rebase_branch(branch)
+    }
+
+    pub fn current_branch() -> Result<String, String> {
+        branches::current_branch()
+    }
+
+    pub fn can_fast_forward_from(branch: &str) -> bool {
+        branches::can_fast_forward_from(branch)
+    }
+
+    pub fn can_fast_forward_into(branch: &str) -> bool {
+        branches::can_fast_forward_into(branch)
+    }
+
+    pub fn is_ancestor(ancestor: &str, descendant: &str) -> bool {
+        branches::is_ancestor(ancestor, descendant)
+    }
+
+    pub fn merge_into(target: &str, source: &str, strategy: MergeStrategy) -> Result<(), String> {
+        branches::merge_into(target, source, strategy)
+    }
+
+    pub fn merge_with_strategy(branch: &str, strategy: MergeStrategy) -> Result<(), String> {
+        branches::merge_with_strategy(branch, strategy)
     }
 }

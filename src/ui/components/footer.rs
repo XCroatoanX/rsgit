@@ -25,6 +25,8 @@ impl<'a> FooterComponent<'a> {
                 shortcuts.push(Span::raw(" | [d] Remove"));
                 shortcuts.push(Span::raw(" | [p] Pull"));
                 shortcuts.push(Span::raw(" | [P] Push"));
+                shortcuts.push(Span::raw(" | [M] Merge"));
+                shortcuts.push(Span::raw(" | [R] Rebase"));
             }
             BranchTab::Remote => {
                 shortcuts.push(Span::raw(" | [n] New remote"));
@@ -35,7 +37,6 @@ impl<'a> FooterComponent<'a> {
                 shortcuts.push(Span::raw(" | [d] Remove tag"));
             }
         }
-
         shortcuts
     }
 }

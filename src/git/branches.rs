@@ -1,5 +1,6 @@
 use super::commands::{get_output, run_command};
 use super::types::{BranchInfo, GitTarget};
+use crate::app::MergeStrategy;
 use rayon::prelude::*;
 use std::process::Command;
 
@@ -29,7 +30,7 @@ pub fn fetch_local_branches() -> Vec<BranchInfo> {
         })
         .collect();
 
-    raw_branches
+    let mut branches: Vec<BranchInfo> = raw_branches
         .into_par_iter()
         .map(|(is_head, name)| {
             let (ahead, behind) = get_branch_counts(&name);
@@ -40,7 +41,11 @@ pub fn fetch_local_branches() -> Vec<BranchInfo> {
                 is_head,
             }
         })
-        .collect()
+        .collect();
+
+    branches.sort_by(|a, b| b.is_head.cmp(&a.is_head));
+
+    branches
 }
 
 pub fn fetch_remote_branches() -> Vec<String> {
@@ -160,4 +165,138 @@ fn query_rev_list(range: &str) -> Option<(usize, usize)> {
     }
 
     None
+}
+
+pub fn rebase_branch(branch: &str) -> Result<(), String> {
+    let branch = branch.trim();
+    if branch.is_empty() {
+        return Err("Branch name cannot be empty".to_string());
+    }
+    run_command(&["rebase", branch])
+}
+
+pub fn current_branch() -> Result<String, String> {
+    let output = Command::new("git")
+        .args(["symbolic-ref", "--quiet", "--short", "HEAD"])
+        .output()
+        .map_err(|err| format!("Failed to execute git command: {}", err))?;
+
+    if !output.status.success() {
+        return Err("HEAD is detached. Check out a branch before merging.".to_string());
+    }
+
+    let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if name.is_empty() {
+        Err("Could not determine the current branch.".to_string())
+    } else {
+        Ok(name)
+    }
+}
+
+fn working_tree_is_clean() -> Result<bool, String> {
+    let output = Command::new("git")
+        .args(["status", "--porcelain", "--untracked-files=no"])
+        .output()
+        .map_err(|err| format!("Failed to execute git command: {}", err))?;
+
+    Ok(output.status.success() && output.stdout.is_empty())
+}
+
+/// True when `ancestor` is an ancestor of `descendant`.
+pub fn is_ancestor(ancestor: &str, descendant: &str) -> bool {
+    let output = Command::new("git")
+        .args(["merge-base", "--is-ancestor", ancestor, descendant])
+        .output();
+    matches!(output, Ok(out) if out.status.success())
+}
+
+/// True when `branch` can be fast-forwarded to HEAD.
+/// This is the check for merging `branch` into the checked-out branch.
+pub fn can_fast_forward_from(branch: &str) -> bool {
+    is_ancestor("HEAD", branch)
+}
+
+/// True when HEAD can be fast-forwarded to `branch`.
+/// This is the check for merging the checked-out branch into `branch`.
+pub fn can_fast_forward_into(branch: &str) -> bool {
+    is_ancestor(branch, "HEAD")
+}
+
+/// Merges `source` into `target` by checking out `target` first.
+/// On success the original branch is checked out again, except for
+/// `SquashUncommitted`, where the changes are intentionally left staged
+/// on `target` for review.
+pub fn merge_into(target: &str, source: &str, strategy: MergeStrategy) -> Result<(), String> {
+    let target = target.trim();
+    let source = source.trim();
+
+    if target.is_empty() || source.is_empty() {
+        return Err("Branch name cannot be empty".to_string());
+    }
+
+    if target == source {
+        return Err(format!("'{}' is already the checked-out branch.", source));
+    }
+
+    if strategy == MergeStrategy::Cancel {
+        return Ok(());
+    }
+
+    if !working_tree_is_clean()? {
+        return Err(
+            "Working tree has uncommitted changes. Commit or stash them before merging."
+                .to_string(),
+        );
+    }
+
+    run_command(&["checkout", target])?;
+
+    let merge_result = match strategy {
+        MergeStrategy::FastForward => run_command(&["merge", "--ff-only", source]),
+        MergeStrategy::MergeCommit => run_command(&["merge", "--no-ff", source]),
+        MergeStrategy::SquashUncommitted => run_command(&["merge", "--squash", source]),
+        MergeStrategy::SquashCommit => run_command(&["merge", "--squash", source]).and_then(|_| {
+            let msg = format!("Merge branch '{}' (squashed)", source);
+            run_command(&["commit", "-m", &msg])
+        }),
+        MergeStrategy::Cancel => Ok(()),
+    };
+
+    match merge_result {
+        Ok(()) => {
+            if strategy != MergeStrategy::SquashUncommitted {
+                run_command(&["checkout", source])?;
+            }
+            Ok(())
+        }
+        Err(err) => {
+            // Return to the branch the user came from when possible. When the merge
+            // stopped on conflicts, staying on the target lets them resolve it there.
+            if run_command(&["checkout", source]).is_ok() {
+                Err(err)
+            } else {
+                Err(format!("{} (left on '{}' to resolve)", err, target))
+            }
+        }
+    }
+}
+
+/// Merges `branch` into the checked-out branch.
+pub fn merge_with_strategy(branch: &str, strategy: MergeStrategy) -> Result<(), String> {
+    let branch = branch.trim();
+    if branch.is_empty() {
+        return Err("Branch name cannot be empty".to_string());
+    }
+
+    match strategy {
+        MergeStrategy::FastForward => run_command(&["merge", "--ff-only", branch]),
+        MergeStrategy::MergeCommit => run_command(&["merge", "--no-ff", branch]),
+        MergeStrategy::SquashUncommitted => run_command(&["merge", "--squash", branch]),
+        MergeStrategy::SquashCommit => {
+            run_command(&["merge", "--squash", branch])?;
+            let msg = format!("Merge branch '{}' (squashed)", branch);
+            run_command(&["commit", "-m", &msg])
+        }
+        MergeStrategy::Cancel => Ok(()),
+    }
 }

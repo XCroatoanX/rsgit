@@ -12,6 +12,15 @@ pub enum DeleteScope {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum MergeStrategy {
+    FastForward,
+    MergeCommit,
+    SquashUncommitted,
+    SquashCommit,
+    Cancel,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum SyncAction {
     Pull,
     Push,
@@ -71,6 +80,14 @@ pub struct App {
     pub refresh_in_progress: bool,
     pub sync_tx: Option<Sender<GitWorkerResult>>,
     pub sync_rx: Option<Receiver<GitWorkerResult>>,
+    pub show_merge_popup: bool,
+    pub merge_options: Vec<(MergeStrategy, &'static str, bool)>,
+    pub merge_selected_index: usize,
+    pub merge_source: String,
+    pub merge_target: String,
+    pub show_rebase_popup: bool,
+    pub rebase_source: String,
+    pub rebase_target: String,
 }
 
 impl App {
@@ -282,11 +299,9 @@ impl App {
                     self.refresh_commit_diff();
                 }
             }
-            ActiveBlock::Diff
-                if !self.commit_diff.is_empty() => {
-                    self.selected_diff_index =
-                        (self.selected_diff_index + 1) % self.commit_diff.len();
-                }
+            ActiveBlock::Diff if !self.commit_diff.is_empty() => {
+                self.selected_diff_index = (self.selected_diff_index + 1) % self.commit_diff.len();
+            }
             _ => {}
         }
     }
@@ -314,10 +329,9 @@ impl App {
                     self.refresh_commit_diff();
                 }
             }
-            ActiveBlock::Diff
-                if !self.commit_diff.is_empty() => {
-                    self.selected_diff_index = self.selected_diff_index.saturating_sub(1);
-                }
+            ActiveBlock::Diff if !self.commit_diff.is_empty() => {
+                self.selected_diff_index = self.selected_diff_index.saturating_sub(1);
+            }
             _ => {}
         }
     }
@@ -327,6 +341,153 @@ impl App {
             BranchTab::Local => self.git_data.local_branches.len(),
             BranchTab::Remote => self.git_data.remote_branches.len(),
             BranchTab::Tags => self.git_data.tags.len(),
+        }
+    }
+
+    pub fn open_rebase_popup(&mut self) {
+        let Some(target) = self.get_selected_entity_name() else {
+            return;
+        };
+
+        let current = match GitData::current_branch() {
+            Ok(current) => current,
+            Err(err) => {
+                self.error_message = Some(err);
+                return;
+            }
+        };
+
+        if current == target {
+            self.error_message = Some(format!("'{}' is already checked out.", target));
+            return;
+        }
+
+        if GitData::is_ancestor(&target, &current) {
+            self.error_message = Some(format!(
+                "Nothing to rebase: '{}' is already based on '{}'.",
+                current, target
+            ));
+            return;
+        }
+
+        self.rebase_source = current;
+        self.rebase_target = target;
+        self.show_rebase_popup = true;
+    }
+
+    pub fn confirm_rebase_selected_entity(&mut self) {
+        self.show_rebase_popup = false;
+
+        let target = std::mem::take(&mut self.rebase_target);
+        self.rebase_source.clear();
+
+        if target.is_empty() {
+            return;
+        }
+
+        if let Err(err) = GitData::rebase_branch(&target) {
+            self.error_message = Some(format!("Rebase failed: {}", err));
+        } else {
+            self.refresh_git();
+        }
+    }
+
+    pub fn open_merge_popup(&mut self) {
+        let Some(target) = self.get_selected_entity_name() else {
+            return;
+        };
+
+        let source = match GitData::current_branch() {
+            Ok(source) => source,
+            Err(err) => {
+                self.error_message = Some(err);
+                return;
+            }
+        };
+
+        let ff_available = if self.branch_tab == BranchTab::Local {
+            if source == target {
+                self.error_message = Some(format!("'{}' is already checked out.", target));
+                return;
+            }
+            if GitData::is_ancestor(&source, &target) {
+                self.error_message = Some(format!(
+                    "Nothing to merge: '{}' already contains '{}'.",
+                    target, source
+                ));
+                return;
+            }
+            // Local branches are merge destinations: HEAD gets merged into them.
+            GitData::can_fast_forward_into(&target)
+        } else {
+            // A remote/tag cannot receive a merge, so it is merged into HEAD.
+            GitData::can_fast_forward_from(&target)
+        };
+
+        self.merge_options = vec![
+            (
+                MergeStrategy::FastForward,
+                "Fast-forward only (--ff-only)",
+                ff_available,
+            ),
+            (
+                MergeStrategy::MergeCommit,
+                "Create merge commit (--no-ff)",
+                true,
+            ),
+            (
+                MergeStrategy::SquashUncommitted,
+                "Squash merge (Uncommitted)",
+                true,
+            ),
+            (MergeStrategy::SquashCommit, "Squash merge & Commit", true),
+            (MergeStrategy::Cancel, "Cancel", true),
+        ];
+
+        self.merge_selected_index = self
+            .merge_options
+            .iter()
+            .position(|(_, _, enabled)| *enabled)
+            .unwrap_or(4);
+
+        self.merge_source = source;
+        self.merge_target = target;
+        self.show_merge_popup = true;
+    }
+
+    pub fn merge_popup_title(&self) -> String {
+        if self.branch_tab == BranchTab::Local {
+            format!("Merge '{}' into '{}'", self.merge_source, self.merge_target)
+        } else {
+            format!("Merge '{}' into '{}'", self.merge_target, self.merge_source)
+        }
+    }
+
+    pub fn confirm_merge_selected_entity(&mut self) {
+        if self.merge_options.is_empty() {
+            return;
+        }
+
+        let (strategy, _, enabled) = self.merge_options[self.merge_selected_index];
+        if !enabled {
+            return;
+        }
+
+        self.show_merge_popup = false;
+
+        let source = std::mem::take(&mut self.merge_source);
+        let target = std::mem::take(&mut self.merge_target);
+
+        let result = if self.branch_tab == BranchTab::Local {
+            GitData::merge_into(&target, &source, strategy)
+        } else {
+            GitData::merge_with_strategy(&target, strategy)
+        };
+
+        if let Err(err) = result {
+            self.error_message = Some(format!("Merge failed: {}", err));
+        } else {
+            self.refresh_git();
         }
     }
 }

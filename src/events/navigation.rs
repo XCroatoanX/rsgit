@@ -21,7 +21,7 @@ pub fn handle_global_keys(app: &mut App, key: KeyEvent) {
         }
 
         KeyCode::Char('[') if app.active_block == ActiveBlock::Branches => {
-            app.select_branch_tab(app.branch_tab.next());
+            app.select_branch_tab(app.branch_tab.previous());
         }
         KeyCode::Char(']') if app.active_block == ActiveBlock::Branches => {
             app.select_branch_tab(app.branch_tab.next());
@@ -54,6 +54,13 @@ pub fn handle_global_keys(app: &mut App, key: KeyEvent) {
         }
         KeyCode::Char('P') if app.active_block == ActiveBlock::Branches => {
             app.push_selected_branch();
+        }
+
+        KeyCode::Char('M') if app.active_block == ActiveBlock::Branches => {
+            app.open_merge_popup();
+        }
+        KeyCode::Char('R') if app.active_block == ActiveBlock::Branches => {
+            app.open_rebase_popup();
         }
 
         _ => {}
