@@ -8,7 +8,8 @@ use ratatui::{
 
 use crate::app::App;
 use crate::git::CommitLine;
-use crate::ui::{ActiveBlock, main_page::create_block};
+use crate::state::ActiveBlock;
+use crate::ui::main_page::create_block;
 
 pub struct CommitHistoryComponent<'a> {
     pub app: &'a App,

@@ -7,7 +7,8 @@ use ratatui::{
 };
 
 use crate::app::{App, SyncAction};
-use crate::ui::main_page::{ActiveBlock, BranchTab, create_block};
+use crate::state::{ActiveBlock, BranchTab};
+use crate::ui::main_page::create_block;
 
 const SPINNER: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 

@@ -1,4 +1,5 @@
 use crate::app::App;
+use crate::state::Popup;
 use crossterm::event::{KeyCode, KeyEvent};
 
 pub fn handle_create_keys(app: &mut App, key: KeyEvent) {
@@ -19,7 +20,7 @@ pub fn handle_create_keys(app: &mut App, key: KeyEvent) {
 pub fn handle_rename_keys(app: &mut App, key: KeyEvent) {
     match key.code {
         KeyCode::Enter => app.submit_rename_selected_entity(),
-        KeyCode::Esc => app.show_rename_popup = false,
+        KeyCode::Esc => app.popup = Popup::None,
         KeyCode::Backspace => {
             app.rename_input.pop();
         }
@@ -54,7 +55,7 @@ pub fn handle_delete_keys(app: &mut App, key: KeyEvent) {
             }
         }
         KeyCode::Enter | KeyCode::Char('y') => app.confirm_delete_selected_entity(),
-        KeyCode::Esc | KeyCode::Char('n') => app.show_delete_popup = false,
+        KeyCode::Esc | KeyCode::Char('n') => app.popup = Popup::None,
         _ => {}
     }
 }
@@ -62,7 +63,7 @@ pub fn handle_delete_keys(app: &mut App, key: KeyEvent) {
 pub fn handle_merge_keys(app: &mut App, key: KeyEvent) {
     match key.code {
         KeyCode::Esc | KeyCode::Char('q') => {
-            app.show_merge_popup = false;
+            app.popup = Popup::None;
         }
         KeyCode::Up | KeyCode::Char('k') => {
             if app.merge_selected_index > 0 {
@@ -85,7 +86,7 @@ pub fn handle_rebase_keys(app: &mut App, key: KeyEvent) {
     match key.code {
         KeyCode::Enter | KeyCode::Char('y') => app.confirm_rebase_selected_entity(),
         KeyCode::Esc | KeyCode::Char('n') | KeyCode::Char('q') => {
-            app.show_rebase_popup = false;
+            app.popup = Popup::None;
         }
         _ => {}
     }

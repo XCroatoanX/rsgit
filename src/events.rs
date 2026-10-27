@@ -3,6 +3,7 @@ pub mod overlays;
 pub mod popups;
 
 use crate::app::App;
+use crate::state::Popup;
 use crossterm::event::KeyEvent;
 
 pub fn handle_key_event(app: &mut App, key: KeyEvent) {
@@ -18,33 +19,13 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
         return;
     }
 
-    if app.show_help || app.show_about {
-        overlays::handle_keys(app, key);
-        return;
+    match app.popup {
+        Popup::Help | Popup::About => overlays::handle_keys(app, key),
+        Popup::Create => popups::handle_create_keys(app, key),
+        Popup::Rename => popups::handle_rename_keys(app, key),
+        Popup::Delete => popups::handle_delete_keys(app, key),
+        Popup::Merge => popups::handle_merge_keys(app, key),
+        Popup::Rebase => popups::handle_rebase_keys(app, key),
+        Popup::None => navigation::handle_global_keys(app, key),
     }
-
-    if app.show_create_popup {
-        popups::handle_create_keys(app, key);
-        return;
-    }
-    if app.show_rename_popup {
-        popups::handle_rename_keys(app, key);
-        return;
-    }
-    if app.show_delete_popup {
-        popups::handle_delete_keys(app, key);
-        return;
-    }
-
-    if app.show_merge_popup {
-        popups::handle_merge_keys(app, key);
-        return;
-    }
-
-    if app.show_rebase_popup {
-        popups::handle_rebase_keys(app, key);
-        return;
-    }
-
-    navigation::handle_global_keys(app, key);
 }

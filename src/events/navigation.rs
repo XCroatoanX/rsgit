@@ -1,5 +1,5 @@
 use crate::app::App;
-use crate::ui::main_page::ActiveBlock;
+use crate::state::{ActiveBlock, Popup};
 use crossterm::event::{KeyCode, KeyEvent};
 
 pub fn handle_global_keys(app: &mut App, key: KeyEvent) {
@@ -41,12 +41,18 @@ pub fn handle_global_keys(app: &mut App, key: KeyEvent) {
         }
 
         KeyCode::Char('?') => {
-            app.show_about = false;
-            app.show_help = !app.show_help;
+            app.popup = if app.popup == Popup::Help {
+                Popup::None
+            } else {
+                Popup::Help
+            };
         }
         KeyCode::Char('a') => {
-            app.show_help = false;
-            app.show_about = !app.show_about;
+            app.popup = if app.popup == Popup::About {
+                Popup::None
+            } else {
+                Popup::About
+            };
         }
 
         KeyCode::Char('p') if app.active_block == ActiveBlock::Branches => {

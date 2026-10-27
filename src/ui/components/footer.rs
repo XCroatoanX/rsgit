@@ -8,7 +8,7 @@ use ratatui::{
 
 use crate::{
     app::App,
-    ui::main_page::{ActiveBlock, BranchTab},
+    state::{ActiveBlock, BranchTab},
 };
 
 pub struct FooterComponent<'a> {

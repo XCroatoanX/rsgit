@@ -10,12 +10,15 @@ pub enum StartupAction {
 }
 
 fn expand_path(raw_path: &str) -> PathBuf {
-    let path = if raw_path == "~" || raw_path.starts_with("~/") || raw_path.starts_with("~\\") {
-        if let Some(home_dir) = dirs::home_dir() {
-            home_dir.join(&raw_path[2..])
-        } else {
-            PathBuf::from(raw_path)
-        }
+    let path = if let Some(rest) = raw_path
+        .strip_prefix("~/")
+        .or_else(|| raw_path.strip_prefix("~\\"))
+    {
+        dirs::home_dir()
+            .map(|home_dir| home_dir.join(rest))
+            .unwrap_or_else(|| PathBuf::from(raw_path))
+    } else if raw_path == "~" {
+        dirs::home_dir().unwrap_or_else(|| PathBuf::from(raw_path))
     } else {
         PathBuf::from(raw_path)
     };

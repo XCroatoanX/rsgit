@@ -44,7 +44,7 @@ pub fn fetch_local_branches() -> Vec<BranchInfo> {
         })
         .collect();
 
-    branches.sort_by(|a, b| b.is_head.cmp(&a.is_head));
+    branches.sort_by_key(|b| !b.is_head);
 
     branches
 }
