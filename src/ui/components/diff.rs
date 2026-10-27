@@ -65,7 +65,7 @@ impl<'a> Widget for DiffComponent<'a> {
                 state.select(Some(self.app.selected_diff_index));
             }
         } else if !self.app.branch_history.is_empty() {
-            state.select(Some(self.app.selected_diff_index));
+            state.select(Some(self.app.selected_branch_history_index));
         }
         ratatui::widgets::StatefulWidget::render(list, area, buf, &mut state);
     }

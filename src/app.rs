@@ -82,6 +82,7 @@ pub struct App {
     pub checked_out_history: Vec<CommitLine>,
     pub commit_diff: Vec<String>,
     pub selected_diff_index: usize,
+    pub selected_branch_history_index: usize,
     pub selected_log_index: usize,
     pub should_quit: bool,
     pub tick_count: usize,
@@ -200,8 +201,8 @@ impl App {
                 self.branch_history_in_progress = false;
                 if self.get_selected_entity_name().as_deref() == Some(target.as_str()) {
                     self.branch_history = history;
-                    self.selected_diff_index = self
-                        .selected_diff_index
+                    self.selected_branch_history_index = self
+                        .selected_branch_history_index
                         .min(self.branch_history.len().saturating_sub(1));
                 }
 
@@ -426,7 +427,7 @@ impl App {
 
         let Some(target) = self.get_selected_entity_name() else {
             self.branch_history.clear();
-            self.selected_diff_index = 0;
+            self.selected_branch_history_index = 0;
             return;
         };
 
@@ -746,5 +747,64 @@ impl From<BranchTab> for GitTarget {
             BranchTab::Remote => GitTarget::RemoteBranch,
             BranchTab::Tags => GitTarget::Tag,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::git::BranchInfo;
+
+    fn app_with_branch(name: &str) -> App {
+        let mut app = App::default();
+        app.git_data.local_branches = vec![BranchInfo {
+            name: name.into(),
+            ahead: 0,
+            behind: 0,
+            is_head: true,
+        }];
+        app
+    }
+
+    fn commit(hash: &str) -> CommitLine {
+        CommitLine {
+            graph: "*".into(),
+            hash: Some(hash.into()),
+            author: Some("me".into()),
+            subject: Some("a commit".into()),
+        }
+    }
+
+    #[test]
+    fn branch_history_refresh_does_not_move_the_commit_diff_selection() {
+        let mut app = app_with_branch("main");
+        app.commit_diff = (0..50).map(|i| format!("line {i}")).collect();
+        app.selected_diff_index = 30;
+
+        app.handle_worker_message(GitWorkerResult::BranchHistory {
+            target: "main".into(),
+            history: vec![commit("abc1234")],
+        });
+
+        assert_eq!(app.selected_diff_index, 30);
+        assert_eq!(app.selected_branch_history_index, 0);
+        assert_eq!(app.branch_history.len(), 1);
+    }
+
+    #[test]
+    fn commit_diff_refresh_clamps_only_the_diff_selection() {
+        let mut app = app_with_branch("main");
+        app.commit_diff = (0..50).map(|i| format!("line {i}")).collect();
+        app.selected_diff_index = 30;
+        app.selected_branch_history_index = 2;
+        app.checked_out_history = vec![commit("abc1234")];
+
+        app.handle_worker_message(GitWorkerResult::CommitDiff {
+            commit: "abc1234".into(),
+            diff: (0..10).map(|i| format!("line {i}")).collect(),
+        });
+
+        assert_eq!(app.selected_diff_index, 9);
+        assert_eq!(app.selected_branch_history_index, 2);
     }
 }
