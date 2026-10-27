@@ -200,6 +200,22 @@ impl<'a> Widget for DashboardApp<'a> {
                 }
                 .render(area, buf);
             }
+            .render(area, buf);
+            return;
+        }
+
+        if self.app.show_rebase_popup {
+            let message = format!(
+                "Rebase '{}' onto '{}'?",
+                self.app.rebase_source, self.app.rebase_target
+            );
+
+            ConfirmPopup {
+                title: "Rebase",
+                message: &message,
+                error: None,
+            }
+            .render(area, buf);
         }
     }
 }

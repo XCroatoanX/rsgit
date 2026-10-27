@@ -1,9 +1,12 @@
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
-    widgets::{Block, BorderType, Borders, Clear, Paragraph, Widget, Wrap},
+    style::{Color, Style},
+    text::Line,
+    widgets::{Clear, Paragraph, Widget, Wrap},
 };
+
+use super::{centered_rect, popup_block};
 
 pub struct ConfirmPopup<'a> {
     pub title: &'a str,
@@ -17,17 +20,7 @@ impl<'a> Widget for ConfirmPopup<'a> {
 
         Clear.render(popup_area, buf);
 
-        let block = Block::default()
-            .title(format!(" {} ", self.title))
-            .title_style(
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            )
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(Color::Yellow))
-            .style(Style::default().bg(Color::Reset));
+        let block = popup_block(Line::from(format!(" {} ", self.title)), Color::Yellow);
 
         let inner = block.inner(popup_area);
         block.render(popup_area, buf);
@@ -68,10 +61,4 @@ impl<'a> Widget for ConfirmPopup<'a> {
                 .render(chunks[1], buf);
         }
     }
-}
-
-fn centered_rect(width_chars: u16, height_lines: u16, r: Rect) -> Rect {
-    let x = r.x + (r.width.saturating_sub(width_chars)) / 2;
-    let y = r.y + (r.height.saturating_sub(height_lines)) / 2;
-    Rect::new(x, y, width_chars.min(r.width), height_lines.min(r.height))
 }

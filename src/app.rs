@@ -601,12 +601,19 @@ impl App {
             return;
         }
 
-        if GitData::is_ancestor(&target, &current) {
-            self.error_message = Some(format!(
-                "Nothing to rebase: '{}' is already based on '{}'.",
-                current, target
-            ));
-            return;
+        match GitData::is_ancestor(&target, &current) {
+            Ok(true) => {
+                self.error_message = Some(format!(
+                    "Nothing to rebase: '{}' is already based on '{}'.",
+                    current, target
+                ));
+                return;
+            }
+            Ok(false) => {}
+            Err(err) => {
+                self.error_message = Some(err);
+                return;
+            }
         }
 
         self.rebase_source = current;
@@ -647,12 +654,19 @@ impl App {
                 self.error_message = Some(format!("'{}' is already checked out.", target));
                 return;
             }
-            if GitData::is_ancestor(&source, &target) {
-                self.error_message = Some(format!(
-                    "Nothing to merge: '{}' already contains '{}'.",
-                    target, source
-                ));
-                return;
+            match GitData::is_ancestor(&source, &target) {
+                Ok(true) => {
+                    self.error_message = Some(format!(
+                        "Nothing to merge: '{}' already contains '{}'.",
+                        target, source
+                    ));
+                    return;
+                }
+                Ok(false) => {}
+                Err(err) => {
+                    self.error_message = Some(err);
+                    return;
+                }
             }
             GitData::can_fast_forward_into(&target)
         } else {

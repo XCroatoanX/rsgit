@@ -1,15 +1,13 @@
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
+    style::{Modifier, Style},
     widgets::{List, ListItem, ListState, Widget},
 };
 
 use crate::app::App;
-use crate::git::CommitLine;
-use crate::state::ActiveBlock;
-use crate::ui::main_page::create_block;
+use crate::ui::components::common::commit_item;
+use crate::ui::{ActiveBlock, main_page::create_block};
 
 pub struct CommitHistoryComponent<'a> {
     pub app: &'a App,
@@ -40,34 +38,4 @@ impl<'a> Widget for CommitHistoryComponent<'a> {
         }
         ratatui::widgets::StatefulWidget::render(list, area, buf, &mut state);
     }
-}
-
-fn commit_item(commit: &CommitLine) -> ListItem<'static> {
-    let Some(hash) = &commit.hash else {
-        return ListItem::new(Span::styled(
-            commit.graph.clone(),
-            Style::default().fg(Color::DarkGray),
-        ));
-    };
-
-    ListItem::new(Line::from(vec![
-        Span::styled(commit.graph.clone(), Style::default().fg(Color::DarkGray)),
-        Span::styled(
-            "● ",
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(hash.clone(), Style::default().fg(Color::Yellow)),
-        Span::raw(" "),
-        Span::styled(
-            commit.author.clone().unwrap_or_default(),
-            Style::default().fg(Color::Cyan),
-        ),
-        Span::raw(" "),
-        Span::styled(
-            commit.subject.clone().unwrap_or_default(),
-            Style::default().fg(Color::White),
-        ),
-    ]))
 }

@@ -97,7 +97,7 @@ impl GitData {
         branches::can_fast_forward_into(branch)
     }
 
-    pub fn is_ancestor(ancestor: &str, descendant: &str) -> bool {
+    pub fn is_ancestor(ancestor: &str, descendant: &str) -> Result<bool, String> {
         branches::is_ancestor(ancestor, descendant)
     }
 

@@ -2,6 +2,7 @@
 name = "rsgit"
 version = "0.2.0-alpha"
 edition = "2024"
+rust-version = "1.85"
 authors = ["Artem Stasyuk <stasyukartem2@gmail.com>"]
 description = "A TUI Git client built with Rust"
 repository = "https://github.com/xcroatoanx/rsgit"
@@ -15,3 +16,7 @@ strum = "0.28.0"
 dirs = "7.0.0"
 dunce = "1.0.5"
 rayon = "1.12.0"
+
+[profile.release]
+lto = "thin"
+strip = true

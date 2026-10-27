@@ -7,9 +7,8 @@ use ratatui::{
 };
 
 use crate::app::App;
-use crate::git::CommitLine;
-use crate::state::ActiveBlock;
-use crate::ui::main_page::create_block_with_title;
+use crate::ui::components::common::commit_item;
+use crate::ui::{ActiveBlock, main_page::create_block_with_title};
 
 pub struct DiffComponent<'a> {
     pub app: &'a App,
@@ -87,34 +86,4 @@ fn diff_item(line: &str) -> ListItem<'static> {
     };
 
     ListItem::new(Span::styled(line.to_string(), Style::default().fg(color)))
-}
-
-fn commit_item(commit: &CommitLine) -> ListItem<'static> {
-    let Some(hash) = &commit.hash else {
-        return ListItem::new(Span::styled(
-            commit.graph.clone(),
-            Style::default().fg(Color::DarkGray),
-        ));
-    };
-
-    ListItem::new(Line::from(vec![
-        Span::styled(commit.graph.clone(), Style::default().fg(Color::DarkGray)),
-        Span::styled(
-            "● ",
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(hash.clone(), Style::default().fg(Color::Yellow)),
-        Span::raw(" "),
-        Span::styled(
-            commit.author.clone().unwrap_or_default(),
-            Style::default().fg(Color::Cyan),
-        ),
-        Span::raw(" "),
-        Span::styled(
-            commit.subject.clone().unwrap_or_default(),
-            Style::default().fg(Color::White),
-        ),
-    ]))
 }
