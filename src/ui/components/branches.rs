@@ -80,8 +80,15 @@ impl<'a> Widget for BranchesComponent<'a> {
                 .collect(),
         };
 
+        let counter = if items.is_empty() {
+            "0/0".to_string()
+        } else {
+            let selected = self.app.selected_branch_index.min(items.len() - 1);
+            format!(" {}/{} ", selected + 1, items.len())
+        };
+
         let list = List::new(items)
-            .block(block)
+            .block(block.title_bottom(Line::from(counter).right_aligned()))
             .highlight_style(
                 Style::default()
                     .fg(Color::Yellow)
