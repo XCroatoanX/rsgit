@@ -1,6 +1,7 @@
 use super::commands::{get_output, run_command};
 use super::types::{BranchInfo, GitTarget};
 use crate::app::MergeStrategy;
+use crate::git::GitData;
 use rayon::prelude::*;
 use std::process::Command;
 
@@ -148,14 +149,7 @@ fn get_branch_counts(branch: &str) -> (usize, usize) {
 }
 
 fn query_rev_list(range: &str) -> Option<(usize, usize)> {
-    let output = Command::new("git")
-        .args(["rev-list", "--left-right", "--count", range])
-        .output();
-
-    if let Ok(out) = output
-        && out.status.success()
-    {
-        let stdout = String::from_utf8_lossy(&out.stdout);
+    if let Ok(stdout) = GitData::run(&["rev-list", "--left-right", "--count", range]) {
         let parts: Vec<&str> = stdout.split_whitespace().collect();
         if parts.len() == 2 {
             let ahead = parts[0].parse::<usize>().unwrap_or(0);
@@ -163,7 +157,6 @@ fn query_rev_list(range: &str) -> Option<(usize, usize)> {
             return Some((ahead, behind));
         }
     }
-
     None
 }
 
@@ -176,56 +169,31 @@ pub fn rebase_branch(branch: &str) -> Result<(), String> {
 }
 
 pub fn current_branch() -> Result<String, String> {
-    let output = Command::new("git")
-        .args(["symbolic-ref", "--quiet", "--short", "HEAD"])
-        .output()
-        .map_err(|err| format!("Failed to execute git command: {}", err))?;
-
-    if !output.status.success() {
-        return Err("HEAD is detached. Check out a branch before merging.".to_string());
-    }
-
-    let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if name.is_empty() {
-        Err("Could not determine the current branch.".to_string())
-    } else {
-        Ok(name)
+    match GitData::run(&["symbolic-ref", "--quiet", "--short", "HEAD"]) {
+        Ok(name) if !name.is_empty() => Ok(name),
+        _ => Err("HEAD is detached or could not determine the current branch.".to_string()),
     }
 }
 
 fn working_tree_is_clean() -> Result<bool, String> {
-    let output = Command::new("git")
-        .args(["status", "--porcelain", "--untracked-files=no"])
-        .output()
-        .map_err(|err| format!("Failed to execute git command: {}", err))?;
-
-    Ok(output.status.success() && output.stdout.is_empty())
+    match GitData::run(&["status", "--porcelain", "--untracked-files=no"]) {
+        Ok(stdout) => Ok(stdout.is_empty()),
+        Err(err) => Err(err),
+    }
 }
 
-/// True when `ancestor` is an ancestor of `descendant`.
 pub fn is_ancestor(ancestor: &str, descendant: &str) -> bool {
-    let output = Command::new("git")
-        .args(["merge-base", "--is-ancestor", ancestor, descendant])
-        .output();
-    matches!(output, Ok(out) if out.status.success())
+    GitData::run(&["merge-base", "--is-ancestor", ancestor, descendant]).is_ok()
 }
 
-/// True when `branch` can be fast-forwarded to HEAD.
-/// This is the check for merging `branch` into the checked-out branch.
 pub fn can_fast_forward_from(branch: &str) -> bool {
     is_ancestor("HEAD", branch)
 }
 
-/// True when HEAD can be fast-forwarded to `branch`.
-/// This is the check for merging the checked-out branch into `branch`.
 pub fn can_fast_forward_into(branch: &str) -> bool {
     is_ancestor(branch, "HEAD")
 }
 
-/// Merges `source` into `target` by checking out `target` first.
-/// On success the original branch is checked out again, except for
-/// `SquashUncommitted`, where the changes are intentionally left staged
-/// on `target` for review.
 pub fn merge_into(target: &str, source: &str, strategy: MergeStrategy) -> Result<(), String> {
     let target = target.trim();
     let source = source.trim();
@@ -270,8 +238,6 @@ pub fn merge_into(target: &str, source: &str, strategy: MergeStrategy) -> Result
             Ok(())
         }
         Err(err) => {
-            // Return to the branch the user came from when possible. When the merge
-            // stopped on conflicts, staying on the target lets them resolve it there.
             if run_command(&["checkout", source]).is_ok() {
                 Err(err)
             } else {
@@ -281,7 +247,6 @@ pub fn merge_into(target: &str, source: &str, strategy: MergeStrategy) -> Result
     }
 }
 
-/// Merges `branch` into the checked-out branch.
 pub fn merge_with_strategy(branch: &str, strategy: MergeStrategy) -> Result<(), String> {
     let branch = branch.trim();
     if branch.is_empty() {
