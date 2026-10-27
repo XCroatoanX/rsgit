@@ -5,7 +5,7 @@ mod sync;
 mod types;
 
 use crate::app::MergeStrategy;
-
+use std::process::Command;
 pub use types::{BranchInfo, CommitLine, GitTarget};
 
 #[derive(Debug, Clone, Default)]
@@ -22,6 +22,23 @@ impl GitData {
             local_branches: branches::fetch_local_branches(),
             remote_branches: branches::fetch_remote_branches(),
             tags: branches::fetch_tags(),
+        }
+    }
+
+    pub fn run(args: &[&str]) -> Result<String, String> {
+        let full_command = format!("git {}", args.join(" "));
+
+        let output = Command::new("git")
+            .args(args)
+            .output()
+            .map_err(|e| format!("Failed to execute process: {}", e))?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            Ok(stdout)
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            Err(format!("Command '{}' failed: {}", full_command, stderr))
         }
     }
 

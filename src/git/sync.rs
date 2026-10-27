@@ -1,40 +1,13 @@
-use std::process::Command;
+use crate::git::GitData;
 
 pub fn fetch_remotes() -> Result<(), String> {
-    let output = Command::new("git")
-        .args(["fetch", "--prune", "--tags"])
-        .output()
-        .map_err(|e| e.to_string())?;
-
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err(String::from_utf8_lossy(&output.stderr).to_string())
-    }
+    GitData::run(&["fetch", "--prune", "--tags"]).map(|_| ())
 }
 
 pub fn pull_branch(branch: &str) -> Result<(), String> {
-    let output = Command::new("git")
-        .args(["pull", "origin", branch])
-        .output()
-        .map_err(|e| e.to_string())?;
-
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err(String::from_utf8_lossy(&output.stderr).to_string())
-    }
+    GitData::run(&["pull", "origin", branch]).map(|_| ())
 }
 
 pub fn push_branch(branch: &str) -> Result<(), String> {
-    let output = Command::new("git")
-        .args(["push", "origin", branch])
-        .output()
-        .map_err(|e| e.to_string())?;
-
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err(String::from_utf8_lossy(&output.stderr).to_string())
-    }
+    GitData::run(&["push", "origin", branch]).map(|_| ())
 }

@@ -54,6 +54,7 @@ pub struct App {
     pub checked_out_history: Vec<CommitLine>,
     pub commit_diff: Vec<String>,
     pub selected_diff_index: usize,
+    pub selected_log_index: usize,
     pub should_quit: bool,
     pub tick_count: usize,
 
@@ -88,6 +89,7 @@ pub struct App {
     pub show_rebase_popup: bool,
     pub rebase_source: String,
     pub rebase_target: String,
+    pub git_log: Vec<String>,
 }
 
 impl App {
@@ -130,8 +132,11 @@ impl App {
                 } => {
                     self.active_sync = None;
                     if let Err(err) = result {
-                        self.error_message =
-                            Some(format!("{:?} failed for '{}': {}", action, branch, err));
+                        let msg = format!("{:?} failed for '{}': {}", action, branch, err);
+                        self.push_log(&msg);
+                        self.error_message = Some(msg);
+                    } else {
+                        self.push_log(format!("{:?} succeeded for '{}'", action, branch));
                     }
                     self.refresh_git();
                 }
@@ -146,12 +151,33 @@ impl App {
         }
     }
 
+    pub fn run_git_action<F>(&mut self, action_desc: impl Into<String>, f: F)
+    where
+        F: FnOnce() -> Result<(), String>,
+    {
+        let desc = action_desc.into();
+        self.push_log(format!("Running: {}", desc));
+
+        match f() {
+            Ok(_) => {
+                self.push_log(format!("Success: {}", desc));
+                self.refresh_git();
+            }
+            Err(err) => {
+                let msg = format!("Failed ({}): {}", desc, err);
+                self.push_log(&msg);
+                self.error_message = Some(msg);
+            }
+        }
+    }
+
     pub fn pull_selected_branch(&mut self) {
         if self.active_sync.is_some() {
             return;
         }
 
         if let Some(name) = self.get_selected_entity_name() {
+            self.push_log(format!("Starting pull for '{}'", name));
             self.active_sync = Some(ActiveSync {
                 branch_name: name.clone(),
                 action: SyncAction::Pull,
@@ -177,6 +203,7 @@ impl App {
         }
 
         if let Some(name) = self.get_selected_entity_name() {
+            self.push_log(format!("Starting push for '{}'", name));
             self.active_sync = Some(ActiveSync {
                 branch_name: name.clone(),
                 action: SyncAction::Push,
@@ -267,16 +294,13 @@ impl App {
     pub fn checkout_selected_entity(&mut self) {
         if let Some(name) = self.get_selected_entity_name() {
             let target: GitTarget = self.branch_tab.into();
+            let desc = format!("checkout {:?} '{}'", target, name);
 
-            if let Err(err) = GitData::checkout_entity(target, &name) {
-                self.error_message = Some(err);
-            } else {
-                if self.branch_tab == BranchTab::Remote {
-                    self.branch_tab = BranchTab::Local;
-                    self.selected_branch_index = 0;
-                }
+            self.run_git_action(desc, || GitData::checkout_entity(target, &name));
 
-                self.refresh_git();
+            if self.error_message.is_none() && self.branch_tab == BranchTab::Remote {
+                self.branch_tab = BranchTab::Local;
+                self.selected_branch_index = 0;
             }
         }
     }
@@ -301,6 +325,9 @@ impl App {
             }
             ActiveBlock::Diff if !self.commit_diff.is_empty() => {
                 self.selected_diff_index = (self.selected_diff_index + 1) % self.commit_diff.len();
+            }
+            ActiveBlock::Logs if !self.git_log.is_empty() => {
+                self.selected_log_index = (self.selected_log_index + 1) % self.git_log.len();
             }
             _ => {}
         }
@@ -331,6 +358,9 @@ impl App {
             }
             ActiveBlock::Diff if !self.commit_diff.is_empty() => {
                 self.selected_diff_index = self.selected_diff_index.saturating_sub(1);
+            }
+            ActiveBlock::Logs if self.selected_log_index > 0 => {
+                self.selected_log_index -= 1;
             }
             _ => {}
         }
@@ -385,11 +415,9 @@ impl App {
             return;
         }
 
-        if let Err(err) = GitData::rebase_branch(&target) {
-            self.error_message = Some(format!("Rebase failed: {}", err));
-        } else {
-            self.refresh_git();
-        }
+        self.run_git_action(format!("rebase branch onto '{}'", target), || {
+            GitData::rebase_branch(&target)
+        });
     }
 
     pub fn open_merge_popup(&mut self) {
@@ -417,10 +445,8 @@ impl App {
                 ));
                 return;
             }
-            // Local branches are merge destinations: HEAD gets merged into them.
             GitData::can_fast_forward_into(&target)
         } else {
-            // A remote/tag cannot receive a merge, so it is merged into HEAD.
             GitData::can_fast_forward_from(&target)
         };
 
@@ -477,17 +503,30 @@ impl App {
 
         let source = std::mem::take(&mut self.merge_source);
         let target = std::mem::take(&mut self.merge_target);
+        let is_local = self.branch_tab == BranchTab::Local;
 
-        let result = if self.branch_tab == BranchTab::Local {
-            GitData::merge_into(&target, &source, strategy)
-        } else {
-            GitData::merge_with_strategy(&target, strategy)
-        };
+        let desc = format!("merge '{}' into '{}' with {:?}", source, target, strategy);
 
-        if let Err(err) = result {
-            self.error_message = Some(format!("Merge failed: {}", err));
-        } else {
-            self.refresh_git();
+        self.run_git_action(desc, move || {
+            if is_local {
+                GitData::merge_into(&target, &source, strategy)
+            } else {
+                GitData::merge_with_strategy(&target, strategy)
+            }
+        });
+    }
+
+    pub fn push_log(&mut self, message: impl Into<String>) {
+        let follow_tail = self.selected_log_index + 1 >= self.git_log.len();
+
+        self.git_log.push(message.into());
+        if self.git_log.len() > 500 {
+            self.git_log.remove(0);
+            self.selected_log_index = self.selected_log_index.saturating_sub(1);
+        }
+
+        if follow_tail {
+            self.selected_log_index = self.git_log.len().saturating_sub(1);
         }
     }
 }
