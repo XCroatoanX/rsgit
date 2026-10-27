@@ -7,8 +7,9 @@ use ratatui::{
 };
 
 use crate::app::App;
+use crate::state::ActiveBlock;
 use crate::ui::components::common::commit_item;
-use crate::ui::{ActiveBlock, main_page::create_block_with_title};
+use crate::ui::main_page::create_block_with_title;
 
 pub struct DiffComponent<'a> {
     pub app: &'a App,
