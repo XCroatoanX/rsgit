@@ -16,13 +16,16 @@ pub struct GitData {
 }
 
 impl GitData {
-    pub fn fetch_branches() -> Self {
-        let _ = sync::fetch_remotes();
+    pub fn load_local() -> Self {
         Self {
             local_branches: branches::fetch_local_branches(),
             remote_branches: branches::fetch_remote_branches(),
             tags: branches::fetch_tags(),
         }
+    }
+
+    pub fn fetch_remotes() -> Result<(), String> {
+        sync::fetch_remotes()
     }
 
     pub fn run(args: &[&str]) -> Result<String, String> {
@@ -94,7 +97,7 @@ impl GitData {
         branches::can_fast_forward_into(branch)
     }
 
-    pub fn is_ancestor(ancestor: &str, descendant: &str) -> bool {
+    pub fn is_ancestor(ancestor: &str, descendant: &str) -> Result<bool, String> {
         branches::is_ancestor(ancestor, descendant)
     }
 

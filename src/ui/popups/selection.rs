@@ -3,8 +3,10 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Clear, Paragraph, Widget},
+    widgets::{Clear, Paragraph, Widget},
 };
+
+use super::{centered_rect, popup_block};
 
 pub struct SelectionOption {
     pub label: &'static str,
@@ -23,16 +25,7 @@ impl<'a> Widget for SelectionPopup<'a> {
         let popup_area = centered_rect(55, 11, area);
         Clear.render(popup_area, buf);
 
-        let block = Block::default()
-            .title(format!(" {} ", self.title))
-            .title_style(
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            )
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(Color::Yellow));
+        let block = popup_block(Line::from(format!(" {} ", self.title)), Color::Yellow);
 
         let inner = block.inner(popup_area);
         block.render(popup_area, buf);
@@ -81,10 +74,4 @@ impl<'a> Widget for SelectionPopup<'a> {
             .style(Style::default().fg(Color::DarkGray))
             .render(chunks[2], buf);
     }
-}
-
-fn centered_rect(width_chars: u16, height_lines: u16, r: Rect) -> Rect {
-    let x = r.x + (r.width.saturating_sub(width_chars)) / 2;
-    let y = r.y + (r.height.saturating_sub(height_lines)) / 2;
-    Rect::new(x, y, width_chars.min(r.width), height_lines.min(r.height))
 }

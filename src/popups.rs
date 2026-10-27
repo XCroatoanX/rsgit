@@ -1,16 +1,16 @@
 use crate::app::{App, DeleteScope};
 use crate::git::{GitData, GitTarget};
-use crate::ui::main_page::BranchTab;
+use crate::state::{BranchTab, Popup};
 
 impl App {
     pub fn open_create_popup(&mut self) {
-        self.show_create_popup = true;
+        self.popup = Popup::Create;
         self.new_entity_input.clear();
         self.create_error_message = None;
     }
 
     pub fn close_create_popup(&mut self) {
-        self.show_create_popup = false;
+        self.popup = Popup::None;
         self.new_entity_input.clear();
         self.create_error_message = None;
     }
@@ -86,7 +86,7 @@ impl App {
                 .position(|(_, _, enabled)| *enabled)
                 .unwrap_or(0);
             self.delete_error_message = None;
-            self.show_delete_popup = true;
+            self.popup = Popup::Delete;
         }
     }
 
@@ -101,7 +101,7 @@ impl App {
             return;
         }
 
-        self.show_delete_popup = false;
+        self.popup = Popup::None;
         let result = match (self.branch_tab, scope) {
             (BranchTab::Tags, DeleteScope::LocalOnly) => {
                 GitData::delete_entity(GitTarget::Tag, &name)
@@ -146,7 +146,7 @@ impl App {
                 None
             };
             self.rename_error_message = None;
-            self.show_rename_popup = true;
+            self.popup = Popup::Rename;
         }
     }
 
@@ -155,7 +155,7 @@ impl App {
             let target: GitTarget = self.branch_tab.into();
             match GitData::rename_entity(target, &old_name, &self.rename_input) {
                 Ok(()) => {
-                    self.show_rename_popup = false;
+                    self.popup = Popup::None;
                     self.rename_input.clear();
                     self.refresh_git();
                 }

@@ -2,13 +2,16 @@ use super::commands::get_output;
 use super::types::CommitLine;
 use std::process::Command;
 
+const HISTORY_LIMIT: usize = 50;
+
 pub fn fetch_history(target: &str) -> Vec<CommitLine> {
+    let limit = format!("-{HISTORY_LIMIT}");
     let lines = get_output(&[
         "log",
         "--graph",
         "--no-decorate",
         "--pretty=format:%x01%h%x1f%an%x1f%s",
-        "-50",
+        &limit,
         target,
     ]);
 

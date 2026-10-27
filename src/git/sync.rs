@@ -1,6 +1,10 @@
 use crate::git::GitData;
 
 pub fn fetch_remotes() -> Result<(), String> {
+    if GitData::run(&["remote"])?.is_empty() {
+        return Ok(());
+    }
+
     GitData::run(&["fetch", "--prune", "--tags"]).map(|_| ())
 }
 

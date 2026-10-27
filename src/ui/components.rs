@@ -1,5 +1,6 @@
 pub mod branches;
 pub mod commit_history;
+pub mod common;
 pub mod diff;
 pub mod files;
 pub mod footer;

@@ -5,9 +5,19 @@ use crate::git::GitData;
 use rayon::prelude::*;
 use std::process::Command;
 
+struct ParsedBranch {
+    is_head: bool,
+    name: String,
+    counts: Option<(usize, usize)>,
+}
+
 pub fn fetch_local_branches() -> Vec<BranchInfo> {
     let output = Command::new("git")
-        .args(["branch", "--format=%(HEAD)|%(refname:short)"])
+        .args([
+            "for-each-ref",
+            "--format=%(HEAD)|%(refname:short)|%(upstream:short)|%(upstream:track)",
+            "refs/heads",
+        ])
         .output();
 
     let Ok(out) = output else { return Vec::new() };
@@ -17,36 +27,67 @@ pub fn fetch_local_branches() -> Vec<BranchInfo> {
 
     let stdout = String::from_utf8_lossy(&out.stdout);
 
-    let raw_branches: Vec<(bool, String)> = stdout
-        .lines()
-        .filter_map(|line| {
-            let parts: Vec<&str> = line.split('|').collect();
-            if parts.len() >= 2 {
-                let is_head = parts[0].trim() == "*";
-                let name = parts[1].trim().to_string();
-                Some((is_head, name))
-            } else {
-                None
-            }
-        })
-        .collect();
+    let raw_branches: Vec<ParsedBranch> = stdout.lines().filter_map(parse_branch_line).collect();
 
     let mut branches: Vec<BranchInfo> = raw_branches
         .into_par_iter()
-        .map(|(is_head, name)| {
-            let (ahead, behind) = get_branch_counts(&name);
+        .map(|branch| {
+            let (ahead, behind) = branch
+                .counts
+                .unwrap_or_else(|| fallback_branch_counts(&branch.name));
             BranchInfo {
-                name,
+                name: branch.name,
                 ahead,
                 behind,
-                is_head,
+                is_head: branch.is_head,
             }
         })
         .collect();
 
-    branches.sort_by(|a, b| b.is_head.cmp(&a.is_head));
+    branches.sort_by_key(|branch| !branch.is_head);
 
     branches
+}
+
+fn parse_branch_line(line: &str) -> Option<ParsedBranch> {
+    let mut parts = line.splitn(4, '|');
+    let is_head = parts.next()?.trim() == "*";
+    let name = parts.next()?.trim();
+
+    if name.is_empty() {
+        return None;
+    }
+
+    let upstream = parts.next().unwrap_or("").trim();
+    let track = parts.next().unwrap_or("").trim();
+
+    let counts = if upstream.is_empty() || track == "[gone]" {
+        None
+    } else {
+        Some(parse_track(track))
+    };
+
+    Some(ParsedBranch {
+        is_head,
+        name: name.to_string(),
+        counts,
+    })
+}
+
+fn parse_track(track: &str) -> (usize, usize) {
+    let mut ahead = 0;
+    let mut behind = 0;
+
+    for part in track.trim_matches(['[', ']']).split(',') {
+        let part = part.trim();
+        if let Some(value) = part.strip_prefix("ahead ") {
+            ahead = value.parse().unwrap_or(0);
+        } else if let Some(value) = part.strip_prefix("behind ") {
+            behind = value.parse().unwrap_or(0);
+        }
+    }
+
+    (ahead, behind)
 }
 
 pub fn fetch_remote_branches() -> Vec<String> {
@@ -134,18 +175,9 @@ pub fn rename_entity(target: GitTarget, old_name: &str, new_name: &str) -> Resul
     }
 }
 
-fn get_branch_counts(branch: &str) -> (usize, usize) {
-    let upstream_range = format!("{}...{}@{{upstream}}", branch, branch);
-    if let Some(counts) = query_rev_list(&upstream_range) {
-        return counts;
-    }
-
-    let fallback_range = format!("{}...origin/{}", branch, branch);
-    if let Some(counts) = query_rev_list(&fallback_range) {
-        return counts;
-    }
-
-    (0, 0)
+fn fallback_branch_counts(branch: &str) -> (usize, usize) {
+    let range = format!("{}...origin/{}", branch, branch);
+    query_rev_list(&range).unwrap_or((0, 0))
 }
 
 fn query_rev_list(range: &str) -> Option<(usize, usize)> {
@@ -182,16 +214,30 @@ fn working_tree_is_clean() -> Result<bool, String> {
     }
 }
 
-pub fn is_ancestor(ancestor: &str, descendant: &str) -> bool {
-    GitData::run(&["merge-base", "--is-ancestor", ancestor, descendant]).is_ok()
+pub fn is_ancestor(ancestor: &str, descendant: &str) -> Result<bool, String> {
+    let output = Command::new("git")
+        .args(["merge-base", "--is-ancestor", ancestor, descendant])
+        .output()
+        .map_err(|err| format!("Failed to run git merge-base: {err}"))?;
+
+    match output.status.code() {
+        Some(0) => Ok(true),
+        Some(1) => Ok(false),
+        _ => {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            Err(format!(
+                "Failed to compare '{ancestor}' with '{descendant}': {stderr}"
+            ))
+        }
+    }
 }
 
 pub fn can_fast_forward_from(branch: &str) -> bool {
-    is_ancestor("HEAD", branch)
+    is_ancestor("HEAD", branch).unwrap_or(false)
 }
 
 pub fn can_fast_forward_into(branch: &str) -> bool {
-    is_ancestor(branch, "HEAD")
+    is_ancestor(branch, "HEAD").unwrap_or(false)
 }
 
 pub fn merge_into(target: &str, source: &str, strategy: MergeStrategy) -> Result<(), String> {

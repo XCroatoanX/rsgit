@@ -6,6 +6,8 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Clear, Paragraph, Widget},
 };
 
+use super::{centered_rect, popup_block};
+
 pub struct TextInputPopup<'a> {
     pub title: &'a str,
     pub label: &'a str,
@@ -25,14 +27,7 @@ impl<'a> Widget for TextInputPopup<'a> {
             Color::LightGreen
         };
 
-        let block = Block::default()
-            .title(Span::styled(
-                format!(" {} ", self.title),
-                Style::default().add_modifier(Modifier::BOLD),
-            ))
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(border_color));
+        let block = popup_block(Line::from(format!(" {} ", self.title)), border_color);
 
         let inner = block.inner(popup_area);
         block.render(popup_area, buf);
@@ -83,10 +78,4 @@ impl<'a> Widget for TextInputPopup<'a> {
             hint.render(chunks[3], buf);
         }
     }
-}
-
-fn centered_rect(width_chars: u16, height_lines: u16, r: Rect) -> Rect {
-    let x = r.x + (r.width.saturating_sub(width_chars)) / 2;
-    let y = r.y + (r.height.saturating_sub(height_lines)) / 2;
-    Rect::new(x, y, width_chars.min(r.width), height_lines.min(r.height))
 }

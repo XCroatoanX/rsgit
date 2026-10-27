@@ -3,6 +3,7 @@ mod events;
 mod git;
 mod popups;
 mod startup;
+mod state;
 mod ui;
 
 use crate::startup::{StartupAction, ensure_git_repo};

@@ -7,9 +7,10 @@ use ratatui::{
     text::Line,
     widgets::{Block, BorderType, Borders, Widget},
 };
-use strum::{EnumCount, EnumIter, IntoEnumIterator};
+use strum::IntoEnumIterator;
 
 use crate::app::App;
+use crate::state::{ActiveBlock, BranchTab, Popup};
 use crate::ui::components::*;
 use crate::ui::popups::textinput::TextInputPopup;
 use crate::ui::popups::{render_about_popup, render_help_popup};
@@ -65,82 +66,6 @@ pub fn create_block_with_title(
         .title(title)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, EnumIter, EnumCount)]
-pub enum ActiveBlock {
-    #[default]
-    Files,
-    Branches,
-    CommitHistory,
-    Diff,
-    Logs,
-}
-
-impl ActiveBlock {
-    pub fn title(self) -> &'static str {
-        match self {
-            Self::Files => "Files",
-            Self::Branches => "Branches",
-            Self::CommitHistory => "Commit history",
-            Self::Diff => "Diff",
-            Self::Logs => "Git",
-        }
-    }
-
-    pub fn next(self) -> Self {
-        match self {
-            Self::Files => Self::Branches,
-            Self::Branches => Self::CommitHistory,
-            Self::CommitHistory | Self::Diff | Self::Logs => Self::Files,
-        }
-    }
-
-    pub fn previous(self) -> Self {
-        match self {
-            Self::Files | Self::Diff | Self::Logs => Self::CommitHistory,
-            Self::Branches => Self::Files,
-            Self::CommitHistory => Self::Branches,
-        }
-    }
-
-    pub fn from_index(index: usize) -> Option<Self> {
-        Self::iter().nth(index)
-    }
-
-    pub fn index(self) -> usize {
-        Self::iter().position(|b| b == self).unwrap_or(0) + 1
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, EnumIter)]
-pub enum BranchTab {
-    #[default]
-    Local,
-    Remote,
-    Tags,
-}
-
-impl BranchTab {
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Local => "Local",
-            Self::Remote => "Remote",
-            Self::Tags => "Tags",
-        }
-    }
-
-    pub fn next(self) -> Self {
-        let all = Self::iter().collect::<Vec<_>>();
-        let pos = all.iter().position(|&x| x == self).unwrap_or(0);
-        all[(pos + 1) % all.len()]
-    }
-
-    pub fn previous(self) -> Self {
-        let all = Self::iter().collect::<Vec<_>>();
-        let pos = all.iter().position(|&x| x == self).unwrap_or(0);
-        all[(pos + all.len() - 1) % all.len()]
-    }
-}
-
 pub struct DashboardApp<'a> {
     pub app: &'a App,
 }
@@ -177,149 +102,104 @@ impl<'a> Widget for DashboardApp<'a> {
             return;
         }
 
-        if self.app.show_delete_popup {
-            let options: Vec<SelectionOption> = self
-                .app
-                .delete_options
-                .iter()
-                .map(|(_, label, enabled)| SelectionOption {
+        match self.app.popup {
+            Popup::None => {}
+            Popup::Delete => {
+                let options: Vec<SelectionOption> = self
+                    .app
+                    .delete_options
+                    .iter()
+                    .map(|(_, label, enabled)| SelectionOption {
+                        label,
+                        enabled: *enabled,
+                    })
+                    .collect();
+
+                let title = match self.app.branch_tab {
+                    BranchTab::Local => "Delete Local Branch",
+                    BranchTab::Remote => "Delete Remote Branch",
+                    BranchTab::Tags => "Delete Tag",
+                };
+
+                SelectionPopup {
+                    title,
+                    options: &options,
+                    selected_index: self.app.delete_selected_index,
+                    warning: None,
+                }
+                .render(area, buf);
+            }
+            Popup::Create => {
+                let (title, label) = match self.app.branch_tab {
+                    BranchTab::Local => (
+                        "Create Local Branch",
+                        "Enter branch name (spaces convert to '-'):",
+                    ),
+                    BranchTab::Remote => (
+                        "Create Remote Branch",
+                        "Enter remote branch name (spaces convert to '-'):",
+                    ),
+                    BranchTab::Tags => ("Create Tag", "Enter tag name (spaces convert to '-'):"),
+                };
+
+                TextInputPopup {
+                    title,
                     label,
-                    enabled: *enabled,
-                })
-                .collect();
-
-            let title = match self.app.branch_tab {
-                BranchTab::Local => "Delete Local Branch",
-                BranchTab::Remote => "Delete Remote Branch",
-                BranchTab::Tags => "Delete Tag",
-            };
-
-            SelectionPopup {
-                title,
-                options: &options,
-                selected_index: self.app.delete_selected_index,
-                warning: None,
+                    input: &self.app.new_entity_input,
+                    error: self.app.create_error_message.as_deref(),
+                }
+                .render(area, buf);
             }
-            .render(area, buf);
-            return;
-        }
+            Popup::Rename => {
+                let (title, label) = match self.app.branch_tab {
+                    BranchTab::Local => ("Rename Local Branch", "Enter new branch name:"),
+                    BranchTab::Remote => ("Rename Remote Branch", "Enter new remote branch name:"),
+                    BranchTab::Tags => ("Rename Tag", "Enter new tag name:"),
+                };
 
-        if self.app.show_create_popup {
-            let (title, label) = match self.app.branch_tab {
-                BranchTab::Local => (
-                    "Create Local Branch",
-                    "Enter branch name (spaces convert to '-'):",
-                ),
-                BranchTab::Remote => (
-                    "Create Remote Branch",
-                    "Enter remote branch name (spaces convert to '-'):",
-                ),
-                BranchTab::Tags => ("Create Tag", "Enter tag name (spaces convert to '-'):"),
-            };
-
-            TextInputPopup {
-                title,
-                label,
-                input: &self.app.new_entity_input,
-                error: self.app.create_error_message.as_deref(),
-            }
-            .render(area, buf);
-            return;
-        }
-
-        if self.app.show_rename_popup {
-            let (title, label) = match self.app.branch_tab {
-                BranchTab::Local => ("Rename Local Branch", "Enter new branch name:"),
-                BranchTab::Remote => ("Rename Remote Branch", "Enter new remote branch name:"),
-                BranchTab::Tags => ("Rename Tag", "Enter new tag name:"),
-            };
-
-            TextInputPopup {
-                title,
-                label,
-                input: &self.app.rename_input,
-                error: self.app.rename_error_message.as_deref(),
-            }
-            .render(area, buf);
-            return;
-        }
-
-        if self.app.show_help {
-            render_help_popup(area, buf);
-            return;
-        }
-
-        if self.app.show_about {
-            render_about_popup(area, buf);
-            return;
-        }
-
-        if self.app.show_delete_popup {
-            let options: Vec<SelectionOption> = self
-                .app
-                .delete_options
-                .iter()
-                .map(|(_, label, enabled)| SelectionOption {
+                TextInputPopup {
+                    title,
                     label,
-                    enabled: *enabled,
-                })
-                .collect();
-
-            SelectionPopup {
-                title: "Delete Options",
-                options: &options,
-                selected_index: self.app.delete_selected_index,
-                warning: None,
+                    input: &self.app.rename_input,
+                    error: self.app.rename_error_message.as_deref(),
+                }
+                .render(area, buf);
             }
-            .render(area, buf);
-            return;
-        }
+            Popup::Help => render_help_popup(area, buf),
+            Popup::About => render_about_popup(area, buf),
+            Popup::Merge => {
+                let options: Vec<SelectionOption> = self
+                    .app
+                    .merge_options
+                    .iter()
+                    .map(|(_, label, enabled)| SelectionOption {
+                        label,
+                        enabled: *enabled,
+                    })
+                    .collect();
 
-        if self.app.show_rename_popup {
-            TextInputPopup {
-                title: "Rename Branch",
-                label: "Enter new branch name:",
-                input: &self.app.rename_input,
-                error: self.app.rename_warning.as_deref(),
+                let title = self.app.merge_popup_title();
+                SelectionPopup {
+                    title: &title,
+                    options: &options,
+                    selected_index: self.app.merge_selected_index,
+                    warning: None,
+                }
+                .render(area, buf);
             }
-            .render(area, buf);
-        }
+            Popup::Rebase => {
+                let message = format!(
+                    "Rebase '{}' onto '{}'?",
+                    self.app.rebase_source, self.app.rebase_target
+                );
 
-        if self.app.show_merge_popup {
-            let options: Vec<SelectionOption> = self
-                .app
-                .merge_options
-                .iter()
-                .map(|(_, label, enabled)| SelectionOption {
-                    label,
-                    enabled: *enabled,
-                })
-                .collect();
-
-            let title = self.app.merge_popup_title();
-            SelectionPopup {
-                title: &title,
-                options: &options,
-                selected_index: self.app.merge_selected_index,
-                warning: None,
+                ConfirmPopup {
+                    title: "Rebase",
+                    message: &message,
+                    error: None,
+                }
+                .render(area, buf);
             }
-            .render(area, buf);
-            return;
-        }
-
-        if self.app.show_rebase_popup {
-            let message = format!(
-                "Rebase '{}' onto '{}'?",
-                self.app.rebase_source, self.app.rebase_target
-            );
-
-            ConfirmPopup {
-                title: "Rebase",
-                message: &message,
-                error: None,
-            }
-            .render(area, buf);
-            return;
         }
     }
 }

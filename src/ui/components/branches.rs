@@ -7,7 +7,8 @@ use ratatui::{
 };
 
 use crate::app::{App, SyncAction};
-use crate::ui::main_page::{ActiveBlock, BranchTab, create_block};
+use crate::state::{ActiveBlock, BranchTab};
+use crate::ui::main_page::create_block;
 
 const SPINNER: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
@@ -17,36 +18,32 @@ pub struct BranchesComponent<'a> {
 
 impl<'a> BranchesComponent<'a> {
     fn create_item_line(&self, name: &str, display_text: &str) -> ListItem<'a> {
-        let is_syncing = self
+        let Some(sync) = self
             .app
             .active_sync
             .as_ref()
-            .is_some_and(|sync| sync.branch_name == name);
+            .filter(|sync| sync.branch_name == name)
+        else {
+            return ListItem::new(display_text.to_string());
+        };
 
-        if is_syncing {
-            let sync = self.app.active_sync.as_ref().unwrap();
-            let frame = SPINNER[self.app.tick_count % SPINNER.len()];
+        let frame = SPINNER[self.app.tick_count % SPINNER.len()];
 
-            let (action_str, action_color) = match sync.action {
-                SyncAction::Pull => (" pulling...", Color::Cyan),
-                SyncAction::Push => (" pushing...", Color::Magenta),
-            };
+        let (action_str, action_color) = match sync.action {
+            SyncAction::Pull => (" pulling...", Color::Cyan),
+            SyncAction::Push => (" pushing...", Color::Magenta),
+        };
 
-            let line = Line::from(vec![
-                Span::raw(display_text.to_string()),
-                Span::styled(format!(" {frame}"), Style::default().fg(Color::Yellow)),
-                Span::styled(
-                    action_str,
-                    Style::default()
-                        .fg(action_color)
-                        .add_modifier(Modifier::ITALIC),
-                ),
-            ]);
-
-            ListItem::new(line)
-        } else {
-            ListItem::new(display_text.to_string())
-        }
+        ListItem::new(Line::from(vec![
+            Span::raw(display_text.to_string()),
+            Span::styled(format!(" {frame}"), Style::default().fg(Color::Yellow)),
+            Span::styled(
+                action_str,
+                Style::default()
+                    .fg(action_color)
+                    .add_modifier(Modifier::ITALIC),
+            ),
+        ]))
     }
 }
 
