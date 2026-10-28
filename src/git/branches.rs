@@ -164,12 +164,9 @@ pub fn rename_entity(target: GitTarget, old_name: &str, new_name: &str) -> Resul
             run_command(&["tag", "-d", old_name])
         }
         GitTarget::RemoteBranch => {
-            let (remote, old_remote_branch) =
-                old_name.split_once('/').unwrap_or(("origin", old_name));
-
             let refspec = format!("{}:refs/heads/{}", old_name, new_name);
-            run_command(&["push", remote, &refspec])?;
-            run_command(&["push", remote, "--delete", old_remote_branch])
+            run_command(&["push", "origin", &refspec])?;
+            run_command(&["push", "origin", "--delete", old_name])
         }
     }
 }
