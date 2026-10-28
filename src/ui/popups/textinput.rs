@@ -12,6 +12,7 @@ pub struct TextInputPopup<'a> {
     pub title: &'a str,
     pub label: &'a str,
     pub input: &'a str,
+    pub cursor: usize,
     pub error: Option<&'a str>,
 }
 
@@ -55,17 +56,26 @@ impl<'a> Widget for TextInputPopup<'a> {
             .style(Style::default().fg(Color::Gray))
             .render(chunks[0], buf);
 
+        let cursor_chars = self.cursor.min(self.input.chars().count());
+        let content_width = chunks[2].width.saturating_sub(2) as usize;
+        let scroll_x = (cursor_chars + 1).saturating_sub(content_width) as u16;
+        let before: String = self.input.chars().take(cursor_chars).collect();
+        let after: String = self.input.chars().skip(cursor_chars).collect();
+
         let input_spans = Line::from(vec![
-            Span::raw(self.input),
+            Span::raw(before),
             Span::styled(" ", Style::default().bg(Color::Yellow).fg(Color::Black)),
+            Span::raw(after),
         ]);
 
-        let input_widget = Paragraph::new(input_spans).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(BorderType::Plain)
-                .border_style(Style::default().fg(Color::Yellow)),
-        );
+        let input_widget = Paragraph::new(input_spans)
+            .scroll((0, scroll_x))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Plain)
+                    .border_style(Style::default().fg(Color::Yellow)),
+            );
         input_widget.render(chunks[2], buf);
 
         if let Some(err) = self.error {

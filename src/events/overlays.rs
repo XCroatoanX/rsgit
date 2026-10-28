@@ -12,7 +12,7 @@ pub fn handle_keys(app: &mut App, key: KeyEvent) {
                 Popup::Help
             };
         }
-        KeyCode::Char('a') => {
+        KeyCode::Char('x') => {
             app.popup = if app.popup == Popup::About {
                 Popup::None
             } else {

@@ -1,18 +1,19 @@
 pub mod branches;
 mod commands;
 mod commits;
+pub mod files;
 mod sync;
 mod types;
 
 use crate::app::MergeStrategy;
-use std::process::Command;
-pub use types::{BranchInfo, CommitLine, GitTarget};
+pub use types::{BranchInfo, ChangedFile, CommitLine, GitTarget};
 
 #[derive(Debug, Clone, Default)]
 pub struct GitData {
     pub local_branches: Vec<BranchInfo>,
     pub remote_branches: Vec<String>,
     pub tags: Vec<String>,
+    pub changed_files: Vec<ChangedFile>,
 }
 
 impl GitData {
@@ -21,6 +22,7 @@ impl GitData {
             local_branches: branches::fetch_local_branches(),
             remote_branches: branches::fetch_remote_branches(),
             tags: branches::fetch_tags(),
+            changed_files: files::fetch_changed_files(),
         }
     }
 
@@ -31,7 +33,7 @@ impl GitData {
     pub fn run(args: &[&str]) -> Result<String, String> {
         let full_command = format!("git {}", args.join(" "));
 
-        let output = Command::new("git")
+        let output = commands::git_command()
             .args(args)
             .output()
             .map_err(|e| format!("Failed to execute process: {}", e))?;
@@ -55,6 +57,30 @@ impl GitData {
 
     pub fn fetch_commit_diff(commit: &str) -> Vec<String> {
         commits::fetch_commit_diff(commit)
+    }
+
+    pub fn stage_file(path: &str) -> Result<(), String> {
+        files::stage_file(path)
+    }
+
+    pub fn unstage_file(path: &str) -> Result<(), String> {
+        files::unstage_file(path)
+    }
+
+    pub fn commit(title: &str, message: &str) -> Result<(), String> {
+        files::commit(title, message)
+    }
+
+    pub fn fetch_changed_file_diff(path: &str, untracked: bool) -> Vec<String> {
+        files::fetch_changed_file_diff(path, untracked)
+    }
+
+    pub fn stage_all() -> Result<(), String> {
+        files::stage_all()
+    }
+
+    pub fn unstage_all() -> Result<(), String> {
+        files::unstage_all()
     }
 
     pub fn create_entity(target: GitTarget, name: &str) -> Result<(), String> {

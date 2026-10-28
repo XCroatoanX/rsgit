@@ -26,6 +26,7 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) {
         Popup::Delete => popups::handle_delete_keys(app, key),
         Popup::Merge => popups::handle_merge_keys(app, key),
         Popup::Rebase => popups::handle_rebase_keys(app, key),
+        Popup::Commit => popups::handle_commit_keys(app, key),
         Popup::None => navigation::handle_global_keys(app, key),
     }
 }

@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use crate::app::App;
-use crate::state::ActiveBlock;
+use crate::state::{ActiveBlock, DiffContext};
 use crate::ui::components::common::commit_item;
 use crate::ui::main_page::create_block_with_title;
 
@@ -17,10 +17,17 @@ pub struct DiffComponent<'a> {
 
 impl<'a> Widget for DiffComponent<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let title = match self.app.active_block {
-            ActiveBlock::Branches => "Log",
-            ActiveBlock::CommitHistory | ActiveBlock::Diff => "Commit diff",
-            _ => "Diff",
+        let context = match self.app.active_block {
+            ActiveBlock::Files => DiffContext::Files,
+            ActiveBlock::Branches => DiffContext::Branches,
+            ActiveBlock::CommitHistory => DiffContext::CommitHistory,
+            ActiveBlock::Diff | ActiveBlock::Logs => self.app.diff_context,
+        };
+
+        let title = match context {
+            DiffContext::Files => "Diff",
+            DiffContext::Branches => "Log",
+            DiffContext::CommitHistory => "Commit diff",
         };
         let block = create_block_with_title(
             self.app,
@@ -28,27 +35,32 @@ impl<'a> Widget for DiffComponent<'a> {
             ActiveBlock::Diff,
         );
 
-        let items = if matches!(
-            self.app.active_block,
-            ActiveBlock::CommitHistory | ActiveBlock::Diff
-        ) {
-            if self.app.commit_diff.is_empty() {
-                vec![ListItem::new("No changes found for the selected commit")]
-            } else {
-                self.app
-                    .commit_diff
-                    .iter()
-                    .map(|line| diff_item(line))
-                    .collect()
+        let items = match context {
+            DiffContext::Files => match self.app.selected_file_path() {
+                Some(path) if self.app.file_diff.is_empty() => {
+                    vec![ListItem::new(format!("No diff available for {path}"))]
+                }
+                Some(_) => self.app.file_diff.iter().map(|line| diff_item(line)).collect(),
+                None => vec![ListItem::new("No files selected")],
+            },
+            DiffContext::Branches => {
+                if let Some(branch) = self.app.get_selected_entity_name() {
+                    if self.app.branch_history.is_empty() {
+                        vec![ListItem::new(format!("No commits found for {branch}"))]
+                    } else {
+                        self.app.branch_history.iter().map(commit_item).collect()
+                    }
+                } else {
+                    vec![ListItem::new("No branch selected")]
+                }
             }
-        } else if let Some(branch) = self.app.get_selected_entity_name() {
-            if self.app.branch_history.is_empty() {
-                vec![ListItem::new(format!("No commits found for {branch}"))]
-            } else {
-                self.app.branch_history.iter().map(commit_item).collect()
+            DiffContext::CommitHistory => {
+                if self.app.commit_diff.is_empty() {
+                    vec![ListItem::new("No changes found for the selected commit")]
+                } else {
+                    self.app.commit_diff.iter().map(|line| diff_item(line)).collect()
+                }
             }
-        } else {
-            vec![ListItem::new("No branch selected")]
         };
 
         let list = List::new(items)
@@ -57,15 +69,30 @@ impl<'a> Widget for DiffComponent<'a> {
             .highlight_symbol("> ");
 
         let mut state = ListState::default();
-        if matches!(
-            self.app.active_block,
-            ActiveBlock::CommitHistory | ActiveBlock::Diff
-        ) {
-            if !self.app.commit_diff.is_empty() {
-                state.select(Some(self.app.selected_diff_index));
+        match context {
+            DiffContext::Files => {
+                if !self.app.file_diff.is_empty() {
+                    state.select(Some(
+                        self.app
+                            .selected_file_diff_index
+                            .min(self.app.file_diff.len().saturating_sub(1)),
+                    ));
+                }
             }
-        } else if !self.app.branch_history.is_empty() {
-            state.select(Some(self.app.selected_branch_history_index));
+            DiffContext::Branches => {
+                if !self.app.branch_history.is_empty() {
+                    state.select(Some(self.app.selected_branch_history_index));
+                }
+            }
+            DiffContext::CommitHistory => {
+                if !self.app.commit_diff.is_empty() {
+                    state.select(Some(
+                        self.app
+                            .selected_diff_index
+                            .min(self.app.commit_diff.len().saturating_sub(1)),
+                    ));
+                }
+            }
         }
         ratatui::widgets::StatefulWidget::render(list, area, buf, &mut state);
     }

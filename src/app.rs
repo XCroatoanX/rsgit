@@ -1,5 +1,8 @@
-use crate::git::{CommitLine, GitData, GitTarget};
-use crate::state::{ActiveBlock, BranchTab, Popup};
+use crate::git::files::DiffRow;
+use crate::git::files::build_rows;
+use crate::git::{ChangedFile, CommitLine, GitData, GitTarget};
+use crate::state::{ActiveBlock, BranchTab, CommitField, DiffContext, Popup};
+use std::collections::HashSet;
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread;
 
@@ -57,6 +60,10 @@ pub enum GitWorkerResult {
         commit: String,
         diff: Vec<String>,
     },
+    FileDiff {
+        path: String,
+        diff: Vec<String>,
+    },
     Action {
         description: String,
         after: AfterAction,
@@ -81,7 +88,10 @@ pub struct App {
     pub branch_history: Vec<CommitLine>,
     pub checked_out_history: Vec<CommitLine>,
     pub commit_diff: Vec<String>,
+    pub file_diff: Vec<String>,
+    pub diff_context: DiffContext,
     pub selected_diff_index: usize,
+    pub selected_file_diff_index: usize,
     pub selected_branch_history_index: usize,
     pub selected_log_index: usize,
     pub should_quit: bool,
@@ -91,6 +101,7 @@ pub struct App {
     pub popup: Popup,
 
     pub new_entity_input: String,
+    pub new_entity_cursor: usize,
     pub create_error_message: Option<String>,
 
     pub delete_options: Vec<(DeleteScope, &'static str, bool)>,
@@ -98,8 +109,16 @@ pub struct App {
     pub delete_error_message: Option<String>,
 
     pub rename_input: String,
+    pub rename_cursor: usize,
     pub rename_warning: Option<String>,
     pub rename_error_message: Option<String>,
+
+    pub commit_title: String,
+    pub commit_title_cursor: usize,
+    pub commit_message: String,
+    pub commit_message_cursor: usize,
+    pub commit_field: CommitField,
+    pub commit_error_message: Option<String>,
 
     pub error_message: Option<String>,
 
@@ -122,6 +141,7 @@ pub struct App {
     pub rebase_source: String,
     pub rebase_target: String,
     pub git_log: Vec<String>,
+    pub collapsed_folders: HashSet<String>,
 }
 
 impl App {
@@ -184,8 +204,10 @@ impl App {
                 self.git_data = git_data;
                 self.refresh_in_progress = false;
                 self.clamp_branch_selection();
+                self.clamp_file_selection();
                 self.request_branch_history();
                 self.request_checked_out_history();
+                self.request_file_diff();
             }
             GitWorkerResult::Fetch { result, git_data } => {
                 self.fetch_in_progress = false;
@@ -194,6 +216,7 @@ impl App {
                 }
                 self.git_data = git_data;
                 self.clamp_branch_selection();
+                self.clamp_file_selection();
                 self.request_branch_history();
                 self.request_checked_out_history();
             }
@@ -223,6 +246,14 @@ impl App {
                     self.request_checked_out_history();
                 } else {
                     self.request_commit_diff();
+                }
+            }
+            GitWorkerResult::FileDiff { path, diff } => {
+                if self.selected_file_path().as_deref() == Some(path.as_str()) {
+                    self.file_diff = diff;
+                    self.selected_file_diff_index = self
+                        .selected_file_diff_index
+                        .min(self.file_diff.len().saturating_sub(1));
                 }
             }
             GitWorkerResult::CommitDiff { commit, diff } => {
@@ -508,6 +539,106 @@ impl App {
         }
     }
 
+    pub fn diff_rows(&self) -> Vec<DiffRow> {
+        build_rows(&self.git_data.changed_files, &self.collapsed_folders)
+    }
+
+    pub fn selected_file_path(&self) -> Option<String> {
+        self.diff_rows().get(self.selected_file_index).map(|row| match row {
+            DiffRow::File { file, .. } => file.path.clone(),
+            DiffRow::Folder { path, .. } => path.clone(),
+        })
+    }
+
+    pub fn request_file_diff(&mut self) {
+        let Some((path, untracked)) = self
+            .diff_rows()
+            .get(self.selected_file_index)
+            .map(|row| match row {
+                DiffRow::File { file, .. } => {
+                    (file.path.clone(), file.index == '?' || file.index == '!')
+                }
+                DiffRow::Folder { path, .. } => (path.clone(), false),
+            })
+        else {
+            return;
+        };
+        let Some(tx) = self.sync_tx.clone() else {
+            return;
+        };
+        let path_clone = path.clone();
+        thread::spawn(move || {
+            let diff = GitData::fetch_changed_file_diff(&path_clone, untracked);
+            let _ = tx.send(GitWorkerResult::FileDiff { path, diff });
+        });
+    }
+
+    pub fn toggle_selected_folder(&mut self) {
+        let rows = self.diff_rows();
+        let Some(DiffRow::Folder { path, .. }) = rows.get(self.selected_file_index) else {
+            return;
+        };
+        let path = path.clone();
+        if !self.collapsed_folders.remove(&path) {
+            self.collapsed_folders.insert(path);
+        }
+    }
+
+    pub fn toggle_stage_selected_file(&mut self) {
+        let rows = self.diff_rows();
+        let Some(path) = rows.get(self.selected_file_index).map(|row| match row {
+            DiffRow::File { file, .. } => file.path.clone(),
+            DiffRow::Folder { path, .. } => path.clone(),
+        }) else {
+            return;
+        };
+        let should_stage = should_stage_entry(&path, &self.git_data.changed_files);
+
+        self.run_git_action(
+            format!("{} '{path}'", if should_stage { "stage" } else { "unstage" }),
+            move || {
+                if should_stage {
+                    GitData::stage_file(&path)
+                } else {
+                    GitData::unstage_file(&path)
+                }
+            },
+        );
+    }
+
+    pub fn toggle_stage_all_files(&mut self) {
+        if self.git_data.changed_files.is_empty() {
+            self.push_log("Nothing to stage or unstage.");
+            return;
+        }
+        let all_staged = self
+            .git_data
+            .changed_files
+            .iter()
+            .all(|f| f.index != ' ' && f.index != '?');
+
+        if all_staged {
+            self.run_git_action("unstage all files", GitData::unstage_all);
+        } else {
+            self.run_git_action("stage all files", GitData::stage_all);
+        }
+    }
+
+    pub fn staged_file_count(&self) -> usize {
+        self.git_data
+            .changed_files
+            .iter()
+            .filter(|f| f.index != ' ' && f.index != '?')
+            .count()
+    }
+
+    pub fn diff_length(&self) -> usize {
+        match self.diff_context {
+            DiffContext::Files => self.file_diff.len(),
+            DiffContext::Branches | DiffContext::CommitHistory => self.commit_diff.len(),
+        }
+    }
+
     pub fn move_selection_down(&mut self) {
         match self.active_block {
             ActiveBlock::Branches => {
@@ -517,7 +648,13 @@ impl App {
                     self.request_branch_history();
                 }
             }
-            ActiveBlock::Files => {}
+            ActiveBlock::Files => {
+                let count = self.diff_rows().len();
+                if count > 0 {
+                    self.selected_file_index = (self.selected_file_index + 1) % count;
+                    self.request_file_diff();
+                }
+            }
             ActiveBlock::CommitHistory => {
                 if !self.checked_out_history.is_empty() {
                     self.selected_commit_index =
@@ -526,9 +663,15 @@ impl App {
                     self.request_commit_diff();
                 }
             }
-            ActiveBlock::Diff if !self.commit_diff.is_empty() => {
-                self.selected_diff_index = (self.selected_diff_index + 1) % self.commit_diff.len();
-            }
+            ActiveBlock::Diff if self.diff_length() > 0 => match self.diff_context {
+                DiffContext::Files => {
+                    self.selected_file_diff_index = (self.selected_file_diff_index + 1)
+                        % self.file_diff.len();
+                }
+                DiffContext::Branches | DiffContext::CommitHistory => {
+                    self.selected_diff_index = (self.selected_diff_index + 1) % self.commit_diff.len();
+                }
+            },
             ActiveBlock::Logs if !self.git_log.is_empty() => {
                 self.selected_log_index = (self.selected_log_index + 1) % self.git_log.len();
             }
@@ -550,7 +693,15 @@ impl App {
                 }
             }
             ActiveBlock::Files => {
-                self.selected_file_index = self.selected_file_index.saturating_sub(1);
+                let count = self.diff_rows().len();
+                if count > 0 {
+                    self.selected_file_index = if self.selected_file_index == 0 {
+                        count - 1
+                    } else {
+                        self.selected_file_index - 1
+                    };
+                    self.request_file_diff();
+                }
             }
             ActiveBlock::CommitHistory => {
                 if self.selected_commit_index > 0 {
@@ -559,9 +710,14 @@ impl App {
                     self.request_commit_diff();
                 }
             }
-            ActiveBlock::Diff if !self.commit_diff.is_empty() => {
-                self.selected_diff_index = self.selected_diff_index.saturating_sub(1);
-            }
+            ActiveBlock::Diff if self.diff_length() > 0 => match self.diff_context {
+                DiffContext::Files => {
+                    self.selected_file_diff_index = self.selected_file_diff_index.saturating_sub(1);
+                }
+                DiffContext::Branches | DiffContext::CommitHistory => {
+                    self.selected_diff_index = self.selected_diff_index.saturating_sub(1);
+                }
+            },
             ActiveBlock::Logs if self.selected_log_index > 0 => {
                 self.selected_log_index -= 1;
             }
@@ -581,6 +737,12 @@ impl App {
         self.selected_branch_index = self
             .selected_branch_index
             .min(self.get_branch_count().saturating_sub(1));
+    }
+
+    fn clamp_file_selection(&mut self) {
+        self.selected_file_index = self
+            .selected_file_index
+            .min(self.diff_rows().len().saturating_sub(1));
     }
 
     pub fn open_rebase_popup(&mut self) {
@@ -754,6 +916,35 @@ impl App {
     }
 }
 
+fn should_stage_entry(path: &str, files: &[ChangedFile]) -> bool {
+    let prefix = format!("{path}/");
+    files.iter().any(|f| {
+        (f.index == '?' || f.worktree != ' ') && (f.path == path || f.path.starts_with(&prefix))
+    })
+}
+
+pub(crate) fn insert_char(text: &mut String, cursor: &mut usize, c: char) {
+    let byte_idx = text
+        .char_indices()
+        .nth(*cursor)
+        .map(|(i, _)| i)
+        .unwrap_or(text.len());
+    text.insert(byte_idx, c);
+    *cursor += 1;
+}
+
+pub(crate) fn delete_char(text: &mut String, cursor: &mut usize) {
+    if *cursor > 0 {
+        let byte_idx = text
+            .char_indices()
+            .nth(*cursor - 1)
+            .map(|(i, _)| i)
+            .unwrap_or(0);
+        text.remove(byte_idx);
+        *cursor -= 1;
+    }
+}
+
 impl From<BranchTab> for GitTarget {
     fn from(tab: BranchTab) -> Self {
         match tab {
@@ -820,5 +1011,86 @@ mod tests {
 
         assert_eq!(app.selected_diff_index, 9);
         assert_eq!(app.selected_branch_history_index, 2);
+    }
+
+    #[test]
+    fn commit_diff_refresh_does_not_move_the_file_diff_selection() {
+        let mut app = app_with_branch("main");
+        app.commit_diff = (0..50).map(|i| format!("line {i}")).collect();
+        app.selected_diff_index = 30;
+        app.selected_file_diff_index = 12;
+        app.checked_out_history = vec![commit("abc1234")];
+
+        app.handle_worker_message(GitWorkerResult::CommitDiff {
+            commit: "abc1234".into(),
+            diff: (0..5).map(|i| format!("line {i}")).collect(),
+        });
+
+        assert_eq!(app.selected_diff_index, 4);
+        assert_eq!(app.selected_file_diff_index, 12);
+    }
+
+    #[test]
+    fn file_diff_refresh_clamps_only_the_file_diff_selection() {
+        let mut app = app_with_branch("main");
+        app.git_data.changed_files = vec![changed("a.rs", 'M', ' ')];
+        app.commit_diff = (0..50).map(|i| format!("line {i}")).collect();
+        app.selected_diff_index = 30;
+        app.file_diff = (0..50).map(|i| format!("line {i}")).collect();
+        app.selected_file_diff_index = 30;
+
+        app.handle_worker_message(GitWorkerResult::FileDiff {
+            path: "a.rs".into(),
+            diff: (0..10).map(|i| format!("line {i}")).collect(),
+        });
+
+        assert_eq!(app.selected_file_diff_index, 9);
+        assert_eq!(app.selected_diff_index, 30);
+    }
+
+    fn changed(path: &str, index: char, worktree: char) -> ChangedFile {
+        ChangedFile {
+            index,
+            worktree,
+            path: path.into(),
+        }
+    }
+
+    #[test]
+    fn should_stage_file_when_untracked_or_unstaged() {
+        let files = [changed("a.rs", ' ', 'M'), changed("b.rs", 'M', ' ')];
+        assert!(should_stage_entry("a.rs", &files));
+        assert!(!should_stage_entry("b.rs", &files));
+        assert!(!should_stage_entry("c.rs", &files));
+    }
+
+    #[test]
+    fn should_stage_folder_when_any_file_under_it_needs_staging() {
+        let files = [
+            changed("src/a.rs", ' ', 'M'),
+            changed("src/nested/b.rs", 'M', ' '),
+            changed("src/nested/c.rs", '?', '?'),
+        ];
+
+        assert!(should_stage_entry("src", &files));
+        assert!(should_stage_entry("src/nested", &files));
+        assert!(!should_stage_entry("src/nested/deep", &files));
+    }
+
+    #[test]
+    fn should_stage_folder_only_when_everything_is_staged() {
+        let files = [
+            changed("src/a.rs", 'M', ' '),
+            changed("src/nested/b.rs", 'A', ' '),
+        ];
+
+        assert!(!should_stage_entry("src", &files));
+        assert!(!should_stage_entry("src/nested", &files));
+
+        let partially_staged = [
+            changed("src/a.rs", 'M', 'M'),
+            changed("src/nested/b.rs", 'A', ' '),
+        ];
+        assert!(should_stage_entry("src", &partially_staged));
     }
 }

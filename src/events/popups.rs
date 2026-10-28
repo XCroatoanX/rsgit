@@ -1,17 +1,22 @@
-use crate::app::App;
-use crate::state::Popup;
+use crate::app::{App, delete_char, insert_char};
+use crate::state::{CommitField, Popup};
 use crossterm::event::{KeyCode, KeyEvent};
 
 pub fn handle_create_keys(app: &mut App, key: KeyEvent) {
     match key.code {
         KeyCode::Enter => app.submit_create_entity(),
         KeyCode::Esc => app.close_create_popup(),
-        KeyCode::Backspace => {
-            app.new_entity_input.pop();
+        KeyCode::Left => {
+            app.new_entity_cursor = app.new_entity_cursor.saturating_sub(1);
         }
+        KeyCode::Right => {
+            app.new_entity_cursor =
+                (app.new_entity_cursor + 1).min(app.new_entity_input.chars().count());
+        }
+        KeyCode::Backspace => delete_char(&mut app.new_entity_input, &mut app.new_entity_cursor),
         KeyCode::Char(c) => {
             let ch = if c == ' ' { '-' } else { c };
-            app.new_entity_input.push(ch);
+            insert_char(&mut app.new_entity_input, &mut app.new_entity_cursor, ch);
         }
         _ => {}
     }
@@ -21,12 +26,16 @@ pub fn handle_rename_keys(app: &mut App, key: KeyEvent) {
     match key.code {
         KeyCode::Enter => app.submit_rename_selected_entity(),
         KeyCode::Esc => app.popup = Popup::None,
-        KeyCode::Backspace => {
-            app.rename_input.pop();
+        KeyCode::Left => {
+            app.rename_cursor = app.rename_cursor.saturating_sub(1);
         }
+        KeyCode::Right => {
+            app.rename_cursor = (app.rename_cursor + 1).min(app.rename_input.chars().count());
+        }
+        KeyCode::Backspace => delete_char(&mut app.rename_input, &mut app.rename_cursor),
         KeyCode::Char(c) => {
             let ch = if c == ' ' { '-' } else { c };
-            app.rename_input.push(ch);
+            insert_char(&mut app.rename_input, &mut app.rename_cursor, ch);
         }
         _ => {}
     }
@@ -88,6 +97,60 @@ pub fn handle_rebase_keys(app: &mut App, key: KeyEvent) {
         KeyCode::Esc | KeyCode::Char('n') | KeyCode::Char('q') => {
             app.popup = Popup::None;
         }
+        _ => {}
+    }
+}
+
+pub fn handle_commit_keys(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Enter => {
+            if app.commit_field == CommitField::Title {
+                app.submit_commit();
+            } else {
+                insert_char(&mut app.commit_message, &mut app.commit_message_cursor, '\n');
+            }
+        }
+        KeyCode::Esc => app.close_commit_popup(),
+        KeyCode::Tab => {
+            app.commit_field = match app.commit_field {
+                CommitField::Title => CommitField::Message,
+                CommitField::Message => CommitField::Title,
+            };
+        }
+        KeyCode::Left => match app.commit_field {
+            CommitField::Title => {
+                app.commit_title_cursor = app.commit_title_cursor.saturating_sub(1);
+            }
+            CommitField::Message => {
+                app.commit_message_cursor = app.commit_message_cursor.saturating_sub(1);
+            }
+        },
+        KeyCode::Right => match app.commit_field {
+            CommitField::Title => {
+                app.commit_title_cursor =
+                    (app.commit_title_cursor + 1).min(app.commit_title.chars().count());
+            }
+            CommitField::Message => {
+                app.commit_message_cursor =
+                    (app.commit_message_cursor + 1).min(app.commit_message.chars().count());
+            }
+        },
+        KeyCode::Backspace => match app.commit_field {
+            CommitField::Title => {
+                delete_char(&mut app.commit_title, &mut app.commit_title_cursor);
+            }
+            CommitField::Message => {
+                delete_char(&mut app.commit_message, &mut app.commit_message_cursor);
+            }
+        },
+        KeyCode::Char(c) => match app.commit_field {
+            CommitField::Title => {
+                insert_char(&mut app.commit_title, &mut app.commit_title_cursor, c);
+            }
+            CommitField::Message => {
+                insert_char(&mut app.commit_message, &mut app.commit_message_cursor, c);
+            }
+        },
         _ => {}
     }
 }

@@ -87,4 +87,31 @@ pub enum Popup {
     Delete,
     Merge,
     Rebase,
+    Commit,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CommitField {
+    #[default]
+    Title,
+    Message,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DiffContext {
+    #[default]
+    CommitHistory,
+    Files,
+    Branches,
+}
+
+impl From<ActiveBlock> for DiffContext {
+    fn from(block: ActiveBlock) -> Self {
+        match block {
+            ActiveBlock::Files => Self::Files,
+            ActiveBlock::Branches => Self::Branches,
+            ActiveBlock::CommitHistory => Self::CommitHistory,
+            ActiveBlock::Diff | ActiveBlock::Logs => Self::CommitHistory,
+        }
+    }
 }

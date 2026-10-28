@@ -17,7 +17,7 @@ pub struct FooterComponent<'a> {
 
 impl<'a> FooterComponent<'a> {
     fn branch_shortcuts(&self) -> Vec<Span<'static>> {
-        let mut shortcuts = vec![Span::raw("[Enter] Checkout")];
+        let mut shortcuts = vec![Span::raw("[Space] Checkout")];
 
         match self.app.branch_tab {
             BranchTab::Local => {
@@ -45,10 +45,12 @@ impl<'a> Widget for FooterComponent<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let shortcuts = if self.app.active_block == ActiveBlock::Branches {
             let mut shortcuts = self.branch_shortcuts();
-            shortcuts.push(Span::raw(" | [q] Quit | [?] Help | [a] About"));
+            shortcuts.push(Span::raw(" | [q] Quit | [?] Help | [x] About"));
             Line::from(shortcuts)
+        } else if self.app.active_block == ActiveBlock::Files {
+            Line::from("[Enter] Fold/Unfold | [Space] Stage/Unstage | [a] Stage/Unstage all | [c] Commit | [q] Quit | [?] Help | [x] About")
         } else {
-            Line::from("[q] Quit | [?] Help | [a] About")
+            Line::from("[q] Quit | [?] Help | [x] About")
         };
 
         let [left_area, right_area] =
