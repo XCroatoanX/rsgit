@@ -3,12 +3,12 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Clear, Paragraph, Widget},
+    widgets::{Block, BorderType, Borders, Clear, Paragraph, Widget, Wrap},
 };
 
 use crate::state::CommitField;
 
-use super::{centered_rect, popup_block};
+use super::{centered_rect, popup_block, wrapped_lines};
 
 pub struct CommitPopup<'a> {
     pub title: &'a str,
@@ -24,7 +24,11 @@ impl<'a> Widget for CommitPopup<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let desc_lines = self.commit_message.matches('\n').count() + 1;
         let desc_field_h = (desc_lines as u16 + 2).min(8);
-        let popup_h = (8 + desc_field_h).min(area.height);
+        let error_h = self
+            .error
+            .map(|err| wrapped_lines(&format!("Error: {}", err), 56))
+            .unwrap_or(1);
+        let popup_h = (8 + desc_field_h + error_h.saturating_sub(1)).min(area.height);
 
         let popup_area = centered_rect(60, popup_h, area);
 
@@ -56,7 +60,7 @@ impl<'a> Widget for CommitPopup<'a> {
                 Constraint::Length(3),
                 Constraint::Length(1),
                 Constraint::Length(desc_field_h),
-                Constraint::Length(1),
+                Constraint::Length(error_h),
                 Constraint::Min(0),
             ])
             .split(padded[1]);
@@ -87,6 +91,7 @@ impl<'a> Widget for CommitPopup<'a> {
         if let Some(err) = self.error {
             Paragraph::new(format!("Error: {}", err))
                 .style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
+                .wrap(Wrap { trim: false })
                 .render(chunks[4], buf);
         } else {
             Paragraph::new("[Tab] Switch  |  [Enter] Commit/New Line  |  [Esc] Cancel")

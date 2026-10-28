@@ -103,15 +103,23 @@ impl App {
             return;
         }
 
+        let remote_branch_name = if self.branch_tab == BranchTab::Remote {
+            name.clone()
+        } else {
+            format!("origin/{name}")
+        };
+
         self.popup = Popup::None;
         let result = match (self.branch_tab, scope) {
             (BranchTab::Tags, DeleteScope::LocalOnly) => {
                 GitData::delete_entity(GitTarget::Tag, &name)
             }
             (_, DeleteScope::LocalOnly) => GitData::delete_entity(GitTarget::LocalBranch, &name),
-            (_, DeleteScope::RemoteOnly) => GitData::delete_entity(GitTarget::RemoteBranch, &name),
+            (_, DeleteScope::RemoteOnly) => {
+                GitData::delete_entity(GitTarget::RemoteBranch, &remote_branch_name)
+            }
             (_, DeleteScope::Both) => GitData::delete_entity(GitTarget::LocalBranch, &name)
-                .and(GitData::delete_entity(GitTarget::RemoteBranch, &name)),
+                .and(GitData::delete_entity(GitTarget::RemoteBranch, &remote_branch_name)),
             (_, DeleteScope::Cancel) => Ok(()),
         };
 

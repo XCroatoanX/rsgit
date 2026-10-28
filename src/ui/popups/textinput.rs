@@ -3,10 +3,10 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Clear, Paragraph, Widget},
+    widgets::{Block, BorderType, Borders, Clear, Paragraph, Widget, Wrap},
 };
 
-use super::{centered_rect, popup_block};
+use super::{centered_rect, popup_block, wrapped_lines};
 
 pub struct TextInputPopup<'a> {
     pub title: &'a str,
@@ -18,7 +18,12 @@ pub struct TextInputPopup<'a> {
 
 impl<'a> Widget for TextInputPopup<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let popup_area = centered_rect(60, 11, area);
+        let error_h = self
+            .error
+            .map(|err| wrapped_lines(&format!("Error: {}", err), 56))
+            .unwrap_or(1);
+        let popup_h = (11 + error_h.saturating_sub(1)).min(area.height);
+        let popup_area = centered_rect(60, popup_h, area);
 
         Clear.render(popup_area, buf);
 
@@ -78,7 +83,8 @@ impl<'a> Widget for TextInputPopup<'a> {
 
         if let Some(err) = self.error {
             let err_widget = Paragraph::new(format!("Error: {}", err))
-                .style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD));
+                .style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
+                .wrap(Wrap { trim: false });
             err_widget.render(chunks[3], buf);
         } else {
             let hint = Paragraph::new("[Enter] Submit  |  [Esc] Cancel")

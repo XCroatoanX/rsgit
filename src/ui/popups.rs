@@ -33,6 +33,25 @@ fn get_dynamic_popup_area(area: Rect, lines: &[Line], padding_x: u16, padding_y:
     )
 }
 
+pub(crate) fn wrapped_lines(text: &str, width: usize) -> u16 {
+    let width = width.max(1);
+    let mut lines = 0usize;
+    let mut col = 0usize;
+    for c in text.chars() {
+        if c == '\n' {
+            lines += 1;
+            col = 0;
+        } else {
+            col += 1;
+            if col > width {
+                lines += 1;
+                col = 1;
+            }
+        }
+    }
+    (lines + 1).min(8) as u16
+}
+
 pub(crate) fn centered_rect(width_chars: u16, height_lines: u16, r: Rect) -> Rect {
     let x = r.x + (r.width.saturating_sub(width_chars)) / 2;
     let y = r.y + (r.height.saturating_sub(height_lines)) / 2;
