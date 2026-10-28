@@ -12,6 +12,7 @@ use strum::IntoEnumIterator;
 use crate::app::App;
 use crate::state::{ActiveBlock, BranchTab, Popup};
 use crate::ui::components::*;
+use crate::ui::popups::auth::AuthPopup;
 use crate::ui::popups::commit::CommitPopup;
 use crate::ui::popups::textinput::TextInputPopup;
 use crate::ui::popups::{render_about_popup, render_help_popup};
@@ -214,6 +215,20 @@ impl<'a> Widget for DashboardApp<'a> {
                     commit_message_cursor: self.app.commit_message_cursor,
                     active_field: self.app.commit_field,
                     error: self.app.commit_error_message.as_deref(),
+                }
+                .render(area, buf);
+            }
+            Popup::Auth => {
+                let context = self.app.auth_context.as_ref();
+                AuthPopup {
+                    title: "Authentication required",
+                    remote_url: context.map(|c| c.remote_url.as_str()).unwrap_or_default(),
+                    username: &self.app.auth_username,
+                    username_cursor: self.app.auth_username_cursor,
+                    password: &self.app.auth_password,
+                    password_cursor: self.app.auth_password_cursor,
+                    active_field: self.app.auth_field,
+                    error: self.app.auth_error_message.as_deref(),
                 }
                 .render(area, buf);
             }

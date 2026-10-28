@@ -48,7 +48,9 @@ impl<'a> Widget for FooterComponent<'a> {
             shortcuts.push(Span::raw(" | [q] Quit | [?] Help | [x] About"));
             Line::from(shortcuts)
         } else if self.app.active_block == ActiveBlock::Files {
-            Line::from("[Enter] Fold/Unfold | [Space] Stage/Unstage | [a] Stage/Unstage all | [c] Commit | [q] Quit | [?] Help | [x] About")
+            Line::from(
+                "[Enter] Fold/Unfold | [Space] Stage/Unstage | [a] Stage/Unstage all | [c] Commit | [q] Quit | [?] Help | [x] About",
+            )
         } else {
             Line::from("[q] Quit | [?] Help | [x] About")
         };

@@ -1,5 +1,5 @@
 use crate::app::{App, delete_char, insert_char};
-use crate::state::{CommitField, Popup};
+use crate::state::{AuthField, CommitField, Popup};
 use crossterm::event::{KeyCode, KeyEvent};
 
 pub fn handle_create_keys(app: &mut App, key: KeyEvent) {
@@ -107,7 +107,11 @@ pub fn handle_commit_keys(app: &mut App, key: KeyEvent) {
             if app.commit_field == CommitField::Title {
                 app.submit_commit();
             } else {
-                insert_char(&mut app.commit_message, &mut app.commit_message_cursor, '\n');
+                insert_char(
+                    &mut app.commit_message,
+                    &mut app.commit_message_cursor,
+                    '\n',
+                );
             }
         }
         KeyCode::Esc => app.close_commit_popup(),
@@ -149,6 +153,54 @@ pub fn handle_commit_keys(app: &mut App, key: KeyEvent) {
             }
             CommitField::Message => {
                 insert_char(&mut app.commit_message, &mut app.commit_message_cursor, c);
+            }
+        },
+        _ => {}
+    }
+}
+
+pub fn handle_auth_keys(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Enter => app.submit_auth(),
+        KeyCode::Esc => app.close_auth_popup(),
+        KeyCode::Tab => {
+            app.auth_field = match app.auth_field {
+                AuthField::Username => AuthField::Password,
+                AuthField::Password => AuthField::Username,
+            };
+        }
+        KeyCode::Left => match app.auth_field {
+            AuthField::Username => {
+                app.auth_username_cursor = app.auth_username_cursor.saturating_sub(1);
+            }
+            AuthField::Password => {
+                app.auth_password_cursor = app.auth_password_cursor.saturating_sub(1);
+            }
+        },
+        KeyCode::Right => match app.auth_field {
+            AuthField::Username => {
+                app.auth_username_cursor =
+                    (app.auth_username_cursor + 1).min(app.auth_username.chars().count());
+            }
+            AuthField::Password => {
+                app.auth_password_cursor =
+                    (app.auth_password_cursor + 1).min(app.auth_password.chars().count());
+            }
+        },
+        KeyCode::Backspace => match app.auth_field {
+            AuthField::Username => {
+                delete_char(&mut app.auth_username, &mut app.auth_username_cursor);
+            }
+            AuthField::Password => {
+                delete_char(&mut app.auth_password, &mut app.auth_password_cursor);
+            }
+        },
+        KeyCode::Char(c) => match app.auth_field {
+            AuthField::Username => {
+                insert_char(&mut app.auth_username, &mut app.auth_username_cursor, c);
+            }
+            AuthField::Password => {
+                insert_char(&mut app.auth_password, &mut app.auth_password_cursor, c);
             }
         },
         _ => {}

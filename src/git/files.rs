@@ -86,9 +86,7 @@ pub fn fetch_changed_file_diff(path: &str, untracked: bool) -> Vec<String> {
             .args(["diff", "--no-index", "--no-color", "/dev/null", path])
             .output()
     } else {
-        git_command()
-            .args(["diff", "HEAD", "--", path])
-            .output()
+        git_command().args(["diff", "HEAD", "--", path]).output()
     };
 
     match output {

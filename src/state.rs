@@ -88,6 +88,7 @@ pub enum Popup {
     Merge,
     Rebase,
     Commit,
+    Auth,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -95,6 +96,13 @@ pub enum CommitField {
     #[default]
     Title,
     Message,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AuthField {
+    #[default]
+    Username,
+    Password,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

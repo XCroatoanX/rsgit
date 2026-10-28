@@ -68,14 +68,12 @@ impl<'a> Widget for TextInputPopup<'a> {
             Span::raw(after),
         ]);
 
-        let input_widget = Paragraph::new(input_spans)
-            .scroll((0, scroll_x))
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_type(BorderType::Plain)
-                    .border_style(Style::default().fg(Color::Yellow)),
-            );
+        let input_widget = Paragraph::new(input_spans).scroll((0, scroll_x)).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Plain)
+                .border_style(Style::default().fg(Color::Yellow)),
+        );
         input_widget.render(chunks[2], buf);
 
         if let Some(err) = self.error {

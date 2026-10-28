@@ -100,11 +100,7 @@ fn input_block(active: bool) -> Block<'static> {
     Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Plain)
-        .border_style(Style::default().fg(if active {
-            Color::Yellow
-        } else {
-            Color::Gray
-        }))
+        .border_style(Style::default().fg(if active { Color::Yellow } else { Color::Gray }))
 }
 
 fn render_input<'a>(
@@ -123,7 +119,11 @@ fn render_input<'a>(
     let cursor_span = Span::styled(
         " ",
         Style::default()
-            .bg(if active { Color::Yellow } else { Color::DarkGray })
+            .bg(if active {
+                Color::Yellow
+            } else {
+                Color::DarkGray
+            })
             .fg(Color::Black),
     );
 
@@ -150,7 +150,11 @@ fn render_textarea<'a>(
     let cursor_span = Span::styled(
         " ",
         Style::default()
-            .bg(if active { Color::Yellow } else { Color::DarkGray })
+            .bg(if active {
+                Color::Yellow
+            } else {
+                Color::DarkGray
+            })
             .fg(Color::Black),
     );
 

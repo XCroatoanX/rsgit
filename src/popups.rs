@@ -1,6 +1,7 @@
-use crate::app::{App, DeleteScope};
+use crate::app::{ActiveSync, App, DeleteScope, GitWorkerResult, SyncAction};
 use crate::git::{GitData, GitTarget};
 use crate::state::{BranchTab, CommitField, Popup};
+use std::thread;
 
 impl App {
     pub fn open_create_popup(&mut self) {
@@ -170,7 +171,8 @@ impl App {
 
     pub fn open_commit_popup(&mut self) {
         if self.active_action.is_some() || self.active_sync.is_some() {
-            self.error_message = Some("Another git action is running. Wait for it to finish.".into());
+            self.error_message =
+                Some("Another git action is running. Wait for it to finish.".into());
             return;
         }
 
@@ -207,6 +209,22 @@ impl App {
             return;
         }
 
+        let (name, email) = GitData::get_identity();
+        if name.is_none() || email.is_none() {
+            let mut missing: Vec<&str> = Vec::new();
+            if name.is_none() {
+                missing.push("user.name");
+            }
+            if email.is_none() {
+                missing.push("user.email");
+            }
+            self.commit_error_message = Some(format!(
+                "Git identity not configured (missing {}). Set them with 'git config --global user.name \"Your Name\"' and 'git config --global user.email \"you@example.com\"'.",
+                missing.join(", ")
+            ));
+            return;
+        }
+
         if self.staged_file_count() == 0 {
             self.commit_error_message = Some("No staged changes to commit.".to_string());
             return;
@@ -220,6 +238,69 @@ impl App {
             Err(err) => {
                 self.commit_error_message = Some(err);
             }
+        }
+    }
+
+    pub fn close_auth_popup(&mut self) {
+        self.popup = Popup::None;
+        self.auth_username.clear();
+        self.auth_username_cursor = 0;
+        self.auth_password.clear();
+        self.auth_password_cursor = 0;
+        self.auth_error_message = None;
+        self.auth_context = None;
+    }
+
+    pub fn submit_auth(&mut self) {
+        let Some(context) = self.auth_context.clone() else {
+            self.close_auth_popup();
+            return;
+        };
+
+        if self.auth_username.trim().is_empty() {
+            self.auth_error_message = Some("Username cannot be empty.".to_string());
+            return;
+        }
+        if self.auth_password.is_empty() {
+            self.auth_error_message = Some("Password or token cannot be empty.".to_string());
+            return;
+        }
+
+        if self.active_sync.is_some() || self.active_action.is_some() {
+            self.auth_error_message = Some("Another git action is running.".to_string());
+            return;
+        }
+
+        self.popup = Popup::None;
+        self.auth_error_message = None;
+        self.active_sync = Some(ActiveSync {
+            branch_name: context.branch.clone(),
+            action: context.action,
+        });
+        self.push_log(format!(
+            "Retrying {:?} for '{}' with credentials",
+            context.action, context.branch
+        ));
+
+        if let Some(tx) = self.sync_tx.clone() {
+            let branch = context.branch.clone();
+            let username = self.auth_username.clone();
+            let password = self.auth_password.clone();
+            thread::spawn(move || {
+                let res = match context.action {
+                    SyncAction::Push => {
+                        GitData::push_branch_with_auth(&branch, &username, &password)
+                    }
+                    SyncAction::Pull => {
+                        GitData::pull_branch_with_auth(&branch, &username, &password)
+                    }
+                };
+                let _ = tx.send(GitWorkerResult::Sync {
+                    branch,
+                    action: context.action,
+                    result: res,
+                });
+            });
         }
     }
 }
