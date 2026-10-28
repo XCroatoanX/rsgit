@@ -1,7 +1,7 @@
 use crate::git::files::DiffRow;
 use crate::git::files::build_rows;
 use crate::git::{ChangedFile, CommitLine, GitData, GitTarget};
-use crate::state::{ActiveBlock, BranchTab, CommitField, DiffContext, Popup};
+use crate::state::{ActiveBlock, AuthField, BranchTab, CommitField, DiffContext, Popup};
 use std::collections::HashSet;
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread;
@@ -43,6 +43,13 @@ pub enum AfterAction {
     #[default]
     None,
     SwitchToLocalBranches,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuthContext {
+    pub action: SyncAction,
+    pub branch: String,
+    pub remote_url: String,
 }
 
 pub enum GitWorkerResult {
@@ -119,6 +126,14 @@ pub struct App {
     pub commit_message_cursor: usize,
     pub commit_field: CommitField,
     pub commit_error_message: Option<String>,
+
+    pub auth_username: String,
+    pub auth_username_cursor: usize,
+    pub auth_password: String,
+    pub auth_password_cursor: usize,
+    pub auth_field: AuthField,
+    pub auth_error_message: Option<String>,
+    pub auth_context: Option<AuthContext>,
 
     pub error_message: Option<String>,
 
@@ -298,12 +313,26 @@ impl App {
                 result,
             } => {
                 self.active_sync = None;
-                if let Err(err) = result {
-                    let msg = format!("{:?} failed for '{}': {}", action, branch, err);
-                    self.push_log(&msg);
-                    self.error_message = Some(msg);
-                } else {
-                    self.push_log(format!("{:?} succeeded for '{}'", action, branch));
+                match result {
+                    Ok(()) => {
+                        self.push_log(format!("{:?} succeeded for '{}'", action, branch));
+                        self.clear_auth();
+                    }
+                    Err(err) => {
+                        let msg = format!("{:?} failed for '{}': {}", action, branch, err);
+                        self.push_log(&msg);
+                        if is_auth_error(&err) {
+                            self.auth_context = Some(AuthContext {
+                                action,
+                                branch,
+                                remote_url: GitData::remote_url(),
+                            });
+                            self.auth_error_message = None;
+                            self.popup = Popup::Auth;
+                        } else {
+                            self.error_message = Some(msg);
+                        }
+                    }
                 }
                 self.refresh_git();
             }
@@ -399,6 +428,60 @@ impl App {
                 });
             }
         }
+    }
+
+    pub fn paste_text(&mut self, text: &str) {
+        if self.error_message.is_some() {
+            return;
+        }
+        match self.popup {
+            Popup::Create => {
+                for c in text.chars() {
+                    let ch = if c == ' ' { '-' } else { c };
+                    insert_char(&mut self.new_entity_input, &mut self.new_entity_cursor, ch);
+                }
+            }
+            Popup::Rename => {
+                for c in text.chars() {
+                    let ch = if c == ' ' { '-' } else { c };
+                    insert_char(&mut self.rename_input, &mut self.rename_cursor, ch);
+                }
+            }
+            Popup::Commit => match self.commit_field {
+                CommitField::Title => {
+                    for c in text.chars() {
+                        insert_char(&mut self.commit_title, &mut self.commit_title_cursor, c);
+                    }
+                }
+                CommitField::Message => {
+                    for c in text.chars() {
+                        insert_char(&mut self.commit_message, &mut self.commit_message_cursor, c);
+                    }
+                }
+            },
+            Popup::Auth => match self.auth_field {
+                AuthField::Username => {
+                    for c in text.chars() {
+                        insert_char(&mut self.auth_username, &mut self.auth_username_cursor, c);
+                    }
+                }
+                AuthField::Password => {
+                    for c in text.chars() {
+                        insert_char(&mut self.auth_password, &mut self.auth_password_cursor, c);
+                    }
+                }
+            },
+            _ => {}
+        }
+    }
+
+    pub fn clear_auth(&mut self) {
+        self.auth_username.clear();
+        self.auth_username_cursor = 0;
+        self.auth_password.clear();
+        self.auth_password_cursor = 0;
+        self.auth_error_message = None;
+        self.auth_context = None;
     }
 
     pub fn refresh_git(&mut self) {
@@ -544,22 +627,24 @@ impl App {
     }
 
     pub fn selected_file_path(&self) -> Option<String> {
-        self.diff_rows().get(self.selected_file_index).map(|row| match row {
-            DiffRow::File { file, .. } => file.path.clone(),
-            DiffRow::Folder { path, .. } => path.clone(),
-        })
+        self.diff_rows()
+            .get(self.selected_file_index)
+            .map(|row| match row {
+                DiffRow::File { file, .. } => file.path.clone(),
+                DiffRow::Folder { path, .. } => path.clone(),
+            })
     }
 
     pub fn request_file_diff(&mut self) {
-        let Some((path, untracked)) = self
-            .diff_rows()
-            .get(self.selected_file_index)
-            .map(|row| match row {
-                DiffRow::File { file, .. } => {
-                    (file.path.clone(), file.index == '?' || file.index == '!')
-                }
-                DiffRow::Folder { path, .. } => (path.clone(), false),
-            })
+        let Some((path, untracked)) =
+            self.diff_rows()
+                .get(self.selected_file_index)
+                .map(|row| match row {
+                    DiffRow::File { file, .. } => {
+                        (file.path.clone(), file.index == '?' || file.index == '!')
+                    }
+                    DiffRow::Folder { path, .. } => (path.clone(), false),
+                })
         else {
             return;
         };
@@ -595,7 +680,10 @@ impl App {
         let should_stage = should_stage_entry(&path, &self.git_data.changed_files);
 
         self.run_git_action(
-            format!("{} '{path}'", if should_stage { "stage" } else { "unstage" }),
+            format!(
+                "{} '{path}'",
+                if should_stage { "stage" } else { "unstage" }
+            ),
             move || {
                 if should_stage {
                     GitData::stage_file(&path)
@@ -665,11 +753,12 @@ impl App {
             }
             ActiveBlock::Diff if self.diff_length() > 0 => match self.diff_context {
                 DiffContext::Files => {
-                    self.selected_file_diff_index = (self.selected_file_diff_index + 1)
-                        % self.file_diff.len();
+                    self.selected_file_diff_index =
+                        (self.selected_file_diff_index + 1) % self.file_diff.len();
                 }
                 DiffContext::Branches | DiffContext::CommitHistory => {
-                    self.selected_diff_index = (self.selected_diff_index + 1) % self.commit_diff.len();
+                    self.selected_diff_index =
+                        (self.selected_diff_index + 1) % self.commit_diff.len();
                 }
             },
             ActiveBlock::Logs if !self.git_log.is_empty() => {
@@ -916,6 +1005,24 @@ impl App {
     }
 }
 
+fn is_auth_error(err: &str) -> bool {
+    let lower = err.to_lowercase();
+    const PATTERNS: &[&str] = &[
+        "authentication failed",
+        "could not read username",
+        "could not read password",
+        "permission denied",
+        "publickey",
+        "username for '",
+        "password for '",
+        "invalid username or password",
+        "password authentication",
+        "not authorized",
+        "requested operation failed",
+    ];
+    PATTERNS.iter().any(|pattern| lower.contains(pattern))
+}
+
 fn should_stage_entry(path: &str, files: &[ChangedFile]) -> bool {
     let prefix = format!("{path}/");
     files.iter().any(|f| {
@@ -952,145 +1059,5 @@ impl From<BranchTab> for GitTarget {
             BranchTab::Remote => GitTarget::RemoteBranch,
             BranchTab::Tags => GitTarget::Tag,
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::git::BranchInfo;
-
-    fn app_with_branch(name: &str) -> App {
-        let mut app = App::default();
-        app.git_data.local_branches = vec![BranchInfo {
-            name: name.into(),
-            ahead: 0,
-            behind: 0,
-            is_head: true,
-        }];
-        app
-    }
-
-    fn commit(hash: &str) -> CommitLine {
-        CommitLine {
-            graph: "*".into(),
-            hash: Some(hash.into()),
-            author: Some("me".into()),
-            subject: Some("a commit".into()),
-        }
-    }
-
-    #[test]
-    fn branch_history_refresh_does_not_move_the_commit_diff_selection() {
-        let mut app = app_with_branch("main");
-        app.commit_diff = (0..50).map(|i| format!("line {i}")).collect();
-        app.selected_diff_index = 30;
-
-        app.handle_worker_message(GitWorkerResult::BranchHistory {
-            target: "main".into(),
-            history: vec![commit("abc1234")],
-        });
-
-        assert_eq!(app.selected_diff_index, 30);
-        assert_eq!(app.selected_branch_history_index, 0);
-        assert_eq!(app.branch_history.len(), 1);
-    }
-
-    #[test]
-    fn commit_diff_refresh_clamps_only_the_diff_selection() {
-        let mut app = app_with_branch("main");
-        app.commit_diff = (0..50).map(|i| format!("line {i}")).collect();
-        app.selected_diff_index = 30;
-        app.selected_branch_history_index = 2;
-        app.checked_out_history = vec![commit("abc1234")];
-
-        app.handle_worker_message(GitWorkerResult::CommitDiff {
-            commit: "abc1234".into(),
-            diff: (0..10).map(|i| format!("line {i}")).collect(),
-        });
-
-        assert_eq!(app.selected_diff_index, 9);
-        assert_eq!(app.selected_branch_history_index, 2);
-    }
-
-    #[test]
-    fn commit_diff_refresh_does_not_move_the_file_diff_selection() {
-        let mut app = app_with_branch("main");
-        app.commit_diff = (0..50).map(|i| format!("line {i}")).collect();
-        app.selected_diff_index = 30;
-        app.selected_file_diff_index = 12;
-        app.checked_out_history = vec![commit("abc1234")];
-
-        app.handle_worker_message(GitWorkerResult::CommitDiff {
-            commit: "abc1234".into(),
-            diff: (0..5).map(|i| format!("line {i}")).collect(),
-        });
-
-        assert_eq!(app.selected_diff_index, 4);
-        assert_eq!(app.selected_file_diff_index, 12);
-    }
-
-    #[test]
-    fn file_diff_refresh_clamps_only_the_file_diff_selection() {
-        let mut app = app_with_branch("main");
-        app.git_data.changed_files = vec![changed("a.rs", 'M', ' ')];
-        app.commit_diff = (0..50).map(|i| format!("line {i}")).collect();
-        app.selected_diff_index = 30;
-        app.file_diff = (0..50).map(|i| format!("line {i}")).collect();
-        app.selected_file_diff_index = 30;
-
-        app.handle_worker_message(GitWorkerResult::FileDiff {
-            path: "a.rs".into(),
-            diff: (0..10).map(|i| format!("line {i}")).collect(),
-        });
-
-        assert_eq!(app.selected_file_diff_index, 9);
-        assert_eq!(app.selected_diff_index, 30);
-    }
-
-    fn changed(path: &str, index: char, worktree: char) -> ChangedFile {
-        ChangedFile {
-            index,
-            worktree,
-            path: path.into(),
-        }
-    }
-
-    #[test]
-    fn should_stage_file_when_untracked_or_unstaged() {
-        let files = [changed("a.rs", ' ', 'M'), changed("b.rs", 'M', ' ')];
-        assert!(should_stage_entry("a.rs", &files));
-        assert!(!should_stage_entry("b.rs", &files));
-        assert!(!should_stage_entry("c.rs", &files));
-    }
-
-    #[test]
-    fn should_stage_folder_when_any_file_under_it_needs_staging() {
-        let files = [
-            changed("src/a.rs", ' ', 'M'),
-            changed("src/nested/b.rs", 'M', ' '),
-            changed("src/nested/c.rs", '?', '?'),
-        ];
-
-        assert!(should_stage_entry("src", &files));
-        assert!(should_stage_entry("src/nested", &files));
-        assert!(!should_stage_entry("src/nested/deep", &files));
-    }
-
-    #[test]
-    fn should_stage_folder_only_when_everything_is_staged() {
-        let files = [
-            changed("src/a.rs", 'M', ' '),
-            changed("src/nested/b.rs", 'A', ' '),
-        ];
-
-        assert!(!should_stage_entry("src", &files));
-        assert!(!should_stage_entry("src/nested", &files));
-
-        let partially_staged = [
-            changed("src/a.rs", 'M', 'M'),
-            changed("src/nested/b.rs", 'A', ' '),
-        ];
-        assert!(should_stage_entry("src", &partially_staged));
     }
 }

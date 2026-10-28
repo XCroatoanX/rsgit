@@ -30,6 +30,30 @@ impl GitData {
         sync::fetch_remotes()
     }
 
+    pub fn get_identity() -> (Option<String>, Option<String>) {
+        commands::get_identity()
+    }
+
+    pub fn remote_url() -> String {
+        commands::remote_url()
+    }
+
+    pub fn push_branch_with_auth(
+        branch: &str,
+        username: &str,
+        password: &str,
+    ) -> Result<(), String> {
+        sync::push_branch_with_auth(branch, username, password)
+    }
+
+    pub fn pull_branch_with_auth(
+        branch: &str,
+        username: &str,
+        password: &str,
+    ) -> Result<(), String> {
+        sync::pull_branch_with_auth(branch, username, password)
+    }
+
     pub fn run(args: &[&str]) -> Result<String, String> {
         let full_command = format!("git {}", args.join(" "));
 

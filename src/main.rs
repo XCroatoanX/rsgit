@@ -26,12 +26,14 @@ fn main() -> Result<()> {
 
     let mut terminal = ratatui::init();
     let result = run(&mut terminal);
+    let _ = crossterm::execute!(std::io::stdout(), crossterm::event::DisableBracketedPaste);
     ratatui::restore();
 
     result
 }
 
 fn run(terminal: &mut DefaultTerminal) -> Result<()> {
+    let _ = crossterm::execute!(std::io::stdout(), crossterm::event::EnableBracketedPaste);
     let mut app = App::new();
 
     loop {
@@ -39,13 +41,17 @@ fn run(terminal: &mut DefaultTerminal) -> Result<()> {
             frame.render_widget(DashboardApp { app: &app }, frame.area());
         })?;
         if event::poll(Duration::from_millis(100))? {
-            if let Event::Key(key) = event::read()?
-                && key.kind == KeyEventKind::Press
-            {
-                events::handle_key_event(&mut app, key);
-                if app.should_quit {
-                    break;
+            match event::read()? {
+                Event::Key(key) if key.kind == KeyEventKind::Press => {
+                    events::handle_key_event(&mut app, key);
+                    if app.should_quit {
+                        break;
+                    }
                 }
+                Event::Paste(text) => {
+                    app.paste_text(&text);
+                }
+                _ => {}
             }
         } else {
             app.tick();

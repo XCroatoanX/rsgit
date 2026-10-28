@@ -40,7 +40,12 @@ impl<'a> Widget for DiffComponent<'a> {
                 Some(path) if self.app.file_diff.is_empty() => {
                     vec![ListItem::new(format!("No diff available for {path}"))]
                 }
-                Some(_) => self.app.file_diff.iter().map(|line| diff_item(line)).collect(),
+                Some(_) => self
+                    .app
+                    .file_diff
+                    .iter()
+                    .map(|line| diff_item(line))
+                    .collect(),
                 None => vec![ListItem::new("No files selected")],
             },
             DiffContext::Branches => {
@@ -58,7 +63,11 @@ impl<'a> Widget for DiffComponent<'a> {
                 if self.app.commit_diff.is_empty() {
                     vec![ListItem::new("No changes found for the selected commit")]
                 } else {
-                    self.app.commit_diff.iter().map(|line| diff_item(line)).collect()
+                    self.app
+                        .commit_diff
+                        .iter()
+                        .map(|line| diff_item(line))
+                        .collect()
                 }
             }
         };

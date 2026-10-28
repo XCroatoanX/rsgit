@@ -1,4 +1,5 @@
 pub mod about;
+pub mod auth;
 pub mod commit;
 pub mod confirm;
 pub mod error;
