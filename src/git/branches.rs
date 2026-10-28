@@ -1,9 +1,8 @@
-use super::commands::{get_output, run_command};
+use super::commands::{get_output, git_command, run_command};
 use super::types::{BranchInfo, GitTarget};
 use crate::app::MergeStrategy;
 use crate::git::GitData;
 use rayon::prelude::*;
-use std::process::Command;
 
 struct ParsedBranch {
     is_head: bool,
@@ -12,7 +11,7 @@ struct ParsedBranch {
 }
 
 pub fn fetch_local_branches() -> Vec<BranchInfo> {
-    let output = Command::new("git")
+    let output = git_command()
         .args([
             "for-each-ref",
             "--format=%(HEAD)|%(refname:short)|%(upstream:short)|%(upstream:track)",
@@ -215,7 +214,7 @@ fn working_tree_is_clean() -> Result<bool, String> {
 }
 
 pub fn is_ancestor(ancestor: &str, descendant: &str) -> Result<bool, String> {
-    let output = Command::new("git")
+    let output = git_command()
         .args(["merge-base", "--is-ancestor", ancestor, descendant])
         .output()
         .map_err(|err| format!("Failed to run git merge-base: {err}"))?;

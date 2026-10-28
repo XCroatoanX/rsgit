@@ -1,6 +1,5 @@
-use super::commands::get_output;
+use super::commands::{get_output, git_command};
 use super::types::CommitLine;
-use std::process::Command;
 
 const HISTORY_LIMIT: usize = 50;
 
@@ -39,7 +38,7 @@ pub fn fetch_history(target: &str) -> Vec<CommitLine> {
 }
 
 pub fn fetch_checked_out_history() -> Vec<CommitLine> {
-    let output = Command::new("git")
+    let output = git_command()
         .args(["symbolic-ref", "--quiet", "--short", "HEAD"])
         .output();
 
@@ -60,7 +59,7 @@ pub fn fetch_checked_out_history() -> Vec<CommitLine> {
 }
 
 pub fn fetch_commit_diff(commit: &str) -> Vec<String> {
-    let output = Command::new("git")
+    let output = git_command()
         .args(["show", "--format=", "--no-ext-diff", "--no-color", commit])
         .output();
 

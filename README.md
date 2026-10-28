@@ -38,7 +38,8 @@ cargo run --release -- /path/to/repository
 | `j` / `Down` | Move selection down |
 | `k` / `Up` | Move selection up |
 | `[` / `]` | Switch branch tabs |
-| `Enter` | Checkout selected ref / confirm popup |
+| `Space` | Checkout selected ref / stage or unstage file |
+| `Enter` | Fold / unfold folder / confirm popup |
 | `n` | Create branch or tag |
 | `r` | Rename selected item |
 | `d` | Delete selected item |

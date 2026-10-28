@@ -23,6 +23,13 @@ impl BranchInfo {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChangedFile {
+    pub index: char,
+    pub worktree: char,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommitLine {
     pub graph: String,
     pub hash: Option<String>,

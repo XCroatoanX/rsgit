@@ -12,6 +12,7 @@ use strum::IntoEnumIterator;
 use crate::app::App;
 use crate::state::{ActiveBlock, BranchTab, Popup};
 use crate::ui::components::*;
+use crate::ui::popups::commit::CommitPopup;
 use crate::ui::popups::textinput::TextInputPopup;
 use crate::ui::popups::{render_about_popup, render_help_popup};
 
@@ -146,6 +147,7 @@ impl<'a> Widget for DashboardApp<'a> {
                     title,
                     label,
                     input: &self.app.new_entity_input,
+                    cursor: self.app.new_entity_cursor,
                     error: self.app.create_error_message.as_deref(),
                 }
                 .render(area, buf);
@@ -161,6 +163,7 @@ impl<'a> Widget for DashboardApp<'a> {
                     title,
                     label,
                     input: &self.app.rename_input,
+                    cursor: self.app.rename_cursor,
                     error: self.app.rename_error_message.as_deref(),
                 }
                 .render(area, buf);
@@ -197,6 +200,20 @@ impl<'a> Widget for DashboardApp<'a> {
                     title: "Rebase",
                     message: &message,
                     error: None,
+                }
+                .render(area, buf);
+            }
+            Popup::Commit => {
+                let staged = self.app.staged_file_count();
+                let staged_word = if staged == 1 { "file" } else { "files" };
+                CommitPopup {
+                    title: &format!("Commit ({staged} {staged_word} staged)"),
+                    commit_title: &self.app.commit_title,
+                    commit_title_cursor: self.app.commit_title_cursor,
+                    commit_message: &self.app.commit_message,
+                    commit_message_cursor: self.app.commit_message_cursor,
+                    active_field: self.app.commit_field,
+                    error: self.app.commit_error_message.as_deref(),
                 }
                 .render(area, buf);
             }

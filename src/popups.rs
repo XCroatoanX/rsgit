@@ -1,11 +1,12 @@
 use crate::app::{App, DeleteScope};
 use crate::git::{GitData, GitTarget};
-use crate::state::{BranchTab, Popup};
+use crate::state::{BranchTab, CommitField, Popup};
 
 impl App {
     pub fn open_create_popup(&mut self) {
         self.popup = Popup::Create;
         self.new_entity_input.clear();
+        self.new_entity_cursor = 0;
         self.create_error_message = None;
     }
 
@@ -131,6 +132,7 @@ impl App {
 
         if let Some(name) = self.get_selected_entity_name() {
             self.rename_input = name.clone();
+            self.rename_cursor = name.chars().count();
             self.rename_warning = if self.git_data.remote_branches.iter().any(|branch| {
                 let branch_name = branch
                     .split_once('/')
@@ -162,6 +164,61 @@ impl App {
                 Err(err) => {
                     self.rename_error_message = Some(err);
                 }
+            }
+        }
+    }
+
+    pub fn open_commit_popup(&mut self) {
+        if self.active_action.is_some() || self.active_sync.is_some() {
+            self.error_message = Some("Another git action is running. Wait for it to finish.".into());
+            return;
+        }
+
+        if self.staged_file_count() == 0 {
+            self.error_message =
+                Some("No staged changes to commit. Stage files first (Space or 'a').".into());
+            return;
+        }
+
+        self.popup = Popup::Commit;
+        self.commit_title.clear();
+        self.commit_title_cursor = 0;
+        self.commit_message.clear();
+        self.commit_message_cursor = 0;
+        self.commit_field = CommitField::Title;
+        self.commit_error_message = None;
+    }
+
+    pub fn close_commit_popup(&mut self) {
+        self.popup = Popup::None;
+        self.commit_title.clear();
+        self.commit_message.clear();
+        self.commit_error_message = None;
+    }
+
+    pub fn submit_commit(&mut self) {
+        if self.active_action.is_some() || self.active_sync.is_some() {
+            self.commit_error_message = Some("Another git action is running.".to_string());
+            return;
+        }
+
+        if self.commit_title.trim().is_empty() {
+            self.commit_error_message = Some("Commit title cannot be empty.".to_string());
+            return;
+        }
+
+        if self.staged_file_count() == 0 {
+            self.commit_error_message = Some("No staged changes to commit.".to_string());
+            return;
+        }
+
+        match GitData::commit(self.commit_title.trim(), self.commit_message.trim()) {
+            Ok(()) => {
+                self.close_commit_popup();
+                self.refresh_git();
+            }
+            Err(err) => {
+                self.commit_error_message = Some(err);
             }
         }
     }
