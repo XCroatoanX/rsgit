@@ -118,8 +118,9 @@ impl App {
             (_, DeleteScope::RemoteOnly) => {
                 GitData::delete_entity(GitTarget::RemoteBranch, &remote_branch_name)
             }
-            (_, DeleteScope::Both) => GitData::delete_entity(GitTarget::LocalBranch, &name)
-                .and(GitData::delete_entity(GitTarget::RemoteBranch, &remote_branch_name)),
+            (_, DeleteScope::Both) => GitData::delete_entity(GitTarget::LocalBranch, &name).and(
+                GitData::delete_entity(GitTarget::RemoteBranch, &remote_branch_name),
+            ),
             (_, DeleteScope::Cancel) => Ok(()),
         };
 
